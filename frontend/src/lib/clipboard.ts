@@ -25,8 +25,12 @@ export function readComponentClipboard(text: string): Component | null {
 export function duplicateComponent(document: ArchitectureDocument, copied: Component, position: { x: number; y: number }, makeId: () => string = () => crypto.randomUUID()): Component {
   const used = new Set([...document.nodes, ...document.edges].map((item) => item.id));
   let id = makeId(); while (used.has(id)) id = makeId();
-  let suffix = ' copy', number = 1;
-  const label = (): string => [...copied.label].slice(0, 120 - suffix.length).join('').trimEnd() + suffix;
-  while (document.nodes.some((item) => item.label === label())) suffix = ' copy ' + ++number;
+  const base = copied.label.replace(/(?: copy(?: \d+)?| \d+)$/i, '').trimEnd() || copied.label;
+  let number = 2;
+  const label = (): string => {
+    const suffix = ' ' + number;
+    return [...base].slice(0, 120 - suffix.length).join('').trimEnd() + suffix;
+  };
+  while (document.nodes.some((item) => item.label === label())) number++;
   return componentSchema.parse({ ...clone(copied), id, label: label(), position: { ...position } });
 }

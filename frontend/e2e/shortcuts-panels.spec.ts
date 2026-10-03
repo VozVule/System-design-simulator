@@ -17,10 +17,10 @@ test('native copy/paste shortcuts duplicate server configuration with new IDs an
   await page.getByRole('group', { name: 'Application component', exact: true }).click(); await page.keyboard.press('ControlOrMeta+c');
   await expect(page.getByRole('status')).toHaveText('Saved');
   await page.getByRole('button', { name: 'Clear selection', exact: true }).click(); await page.keyboard.press('ControlOrMeta+v');
-  await expect(page.getByLabel('Label', { exact: true })).toHaveValue('Application copy'); await expect(page.getByLabel('Maximum RPS')).toHaveValue('240');
-  await expect(page.getByRole('group', { name: 'Application copy component', exact: true })).toBeFocused();
+  await expect(page.getByLabel('Label', { exact: true })).toHaveValue('Application 2'); await expect(page.getByLabel('Maximum RPS')).toHaveValue('240');
+  await expect(page.getByRole('group', { name: 'Application 2 component', exact: true })).toBeFocused();
   await expect(page.getByRole('status')).toHaveText('Unsaved changes'); await page.keyboard.press('ControlOrMeta+v');
-  await expect(page.getByLabel('Label', { exact: true })).toHaveValue('Application copy 2'); await save(page);
+  await expect(page.getByLabel('Label', { exact: true })).toHaveValue('Application 3'); await save(page);
   const saved = (await savedItems(page))[0]; expect(saved.document.nodes).toHaveLength(3); expect(new Set(saved.document.nodes.map((node) => node.id)).size).toBe(3); expect(saved.document.edges).toEqual([]);
   expect(saved.document.nodes[1].position).not.toEqual(saved.document.nodes[2].position);
   await page.reload(); await page.getByRole('button', { name: 'Library', exact: true }).click(); await page.getByRole('button', { name: /^Open Clipboard / }).click();
@@ -50,9 +50,9 @@ test('a copied connected server saves through PUT with its own ID and the origin
   await page.getByRole('group', { name: 'Application component', exact: true }).click(); await page.keyboard.press('ControlOrMeta+c'); await page.keyboard.press('ControlOrMeta+v');
   const replace = page.waitForResponse((response) => response.url() === `${endpoint}/${original.id}` && response.request().method() === 'PUT'); await save(page); const updated = await (await replace).json() as Architecture;
   expect(updated.id).toBe(original.id); expect(updated.document.nodes).toHaveLength(3); expect(updated.document.edges).toEqual(original.document.edges);
-  expect(updated.document.nodes[2]).toMatchObject({ label: 'Application copy', capacity_rps: 320 }); expect(updated.document.nodes[2].id).not.toBe(original.document.nodes[0].id);
+  expect(updated.document.nodes[2]).toMatchObject({ label: 'Application 2', capacity_rps: 320 }); expect(updated.document.nodes[2].id).not.toBe(original.document.nodes[0].id);
   await page.reload(); await page.getByRole('button', { name: 'Library', exact: true }).click(); await page.getByRole('button', { name: `Open ${updated.name} ${updated.id.slice(0, 8)}`, exact: true }).click();
-  await expect(page.getByRole('group', { name: 'Application copy component', exact: true })).toBeVisible(); await expect(page.getByRole('group', { name: / connection$/ })).toHaveCount(1);
+  await expect(page.getByRole('group', { name: 'Application 2 component', exact: true })).toBeVisible(); await expect(page.getByRole('group', { name: / connection$/ })).toHaveCount(1);
 });
 
 test('copy is a snapshot and text input copy/paste keeps native behavior', async ({ page }) => {

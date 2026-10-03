@@ -12,9 +12,18 @@ describe('component clipboard', () => {
     const text = copyComponent(state, component.id); component.label = 'Edited after copy';
     const copied = readComponentClipboard(text); if (!copied) throw new Error('Missing copied component');
     const pasted = duplicateComponent(state.write.document, copied, { x: 32, y: 48 }, () => 'fresh');
-    expect(pasted).toEqual({ ...copied, id: 'fresh', label: copied.label + ' copy', position: { x: 32, y: 48 } });
+    expect(pasted).toEqual({ ...copied, id: 'fresh', label: copied.label + ' 2', position: { x: 32, y: 48 } });
     expect(copied.label).not.toBe(component.label); expect(state.write.document.nodes).toHaveLength(1);
     expect(state.write.document.edges).toEqual([]);
+  });
+  it('numbers repeated copies and copies of numbered or legacy labels without collisions', () => {
+    const state = newEditor(), source = newComponent('server', { x: 0, y: 0 }, 'a');
+    state.write.document.nodes.push(source);
+    const first = duplicateComponent(state.write.document, source, { x: 32, y: 32 }, () => 'b');
+    expect(first.label).toBe('Server 2'); state.write.document.nodes.push(first);
+    const second = duplicateComponent(state.write.document, first, { x: 64, y: 64 }, () => 'c');
+    expect(second.label).toBe('Server 3'); state.write.document.nodes.push(second);
+    expect(duplicateComponent(state.write.document, { ...source, label: 'Server Copy 2' }, { x: 96, y: 96 }, () => 'd').label).toBe('Server 4');
   });
   it('protects invalid drafts on the selected component without blocking valid copies of another component', () => {
     let state = newEditor(); state.write.document.nodes.push(newComponent('server', { x: 0, y: 0 }, 'a'), newComponent('database', { x: 200, y: 0 }, 'b'));
@@ -34,6 +43,6 @@ describe('component clipboard', () => {
     const ids = ['a', 'edge', 'b']; const first = duplicateComponent(state.write.document, source, { x: 32, y: 32 }, () => ids.shift()!);
     expect(first.id).toBe('b'); expect([...first.label]).toHaveLength(120); state.write.document.nodes.push(first);
     const second = duplicateComponent(state.write.document, source, { x: 64, y: 64 }, () => 'c');
-    expect(second.label).toMatch(/ copy 2$/); expect([...second.label]).toHaveLength(120); expect(state.write.document.edges).toHaveLength(1);
+    expect(second.label).toMatch(/ 3$/); expect([...second.label]).toHaveLength(120); expect(state.write.document.edges).toHaveLength(1);
   });
 });
