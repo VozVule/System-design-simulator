@@ -27,7 +27,7 @@ async function openLibrary(page: Page): Promise<void> { await page.getByRole('bu
 async function reopen(page: Page, name: string): Promise<void> {
   await openLibrary(page); await page.getByRole('button', { name: new RegExp('^Open ' + name + ' ') }).click();
 }
-test.beforeEach(async ({ page }) => { await page.goto('/'); });
+test.beforeEach(async ({ page }) => { await page.goto('/?test-store'); });
 
 test('starts empty and saves a named empty architecture without backend requests', async ({ page }) => {
   const backendRequests: string[] = []; page.on('request', (request) => { if (/\/api\/|:8000/.test(request.url())) backendRequests.push(request.url()); });
@@ -133,6 +133,33 @@ test('canvas dragging and handle gestures update the saved domain document', asy
   const out = await source.locator('.svelte-flow__handle-right').boundingBox(), input = await target.locator('.svelte-flow__handle-left').boundingBox(); if (!out || !input) throw new Error('Handles missing');
   await page.mouse.move(out.x + out.width / 2, out.y + out.height / 2); await page.mouse.down(); await page.mouse.move(input.x + input.width / 2, input.y + input.height / 2, { steps: 16 }); await page.mouse.up();
   await save(page); const graph = (await savedItems(page))[0].document; expect(graph.edges).toHaveLength(1); expect(graph.nodes[0].position.y).toBeGreaterThan(30);
+});
+
+test('all five renamed symbols connect through their visible handles and survive reopening', async ({ page }) => {
+  const types = ['Caller Group', 'Load Balancer', 'Gateway', 'Server', 'Database'];
+  for (const [index, type] of types.entries()) await add(page, type, `Node ${index + 1}`, index * 225, 0);
+  await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+  // Wait for the animated Fit before using screen coordinates for actual handle gestures.
+  await page.waitForTimeout(250);
+  for (let index = 0; index < 4; index++) {
+    const source = page.getByRole('group', { name: `Node ${index + 1} component`, exact: true });
+    const target = page.getByRole('group', { name: `Node ${index + 2} component`, exact: true });
+    const output = await source.locator('.svelte-flow__handle-right').boundingBox(), input = await target.locator('.svelte-flow__handle-left').boundingBox();
+    if (!output || !input) throw new Error('Missing symbol handle');
+    await page.mouse.move(output.x + output.width / 2, output.y + output.height / 2); await page.mouse.down();
+    await page.mouse.move(input.x + input.width / 2, input.y + input.height / 2, { steps: 16 }); await page.mouse.up();
+    await expect(page.getByRole('group', { name: / connection$/ })).toHaveCount(index + 1);
+  }
+  await page.getByLabel('Architecture name').fill('Symbols'); await save(page); const before = (await savedItems(page))[0];
+  await page.reload(); await reopen(page, 'Symbols');
+  for (const [index, type] of types.entries()) {
+    const component = page.getByRole('group', { name: `Node ${index + 1} component`, exact: true });
+    await expect(component.getByText(type, { exact: true })).toBeVisible();
+    await expect(component.locator('.node-symbol > svg')).toBeVisible();
+  }
+  await expect(page.getByRole('group', { name: 'Node 1 component', exact: true }).locator('.svelte-flow__handle-left')).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Node 5 component', exact: true }).locator('.svelte-flow__handle-right')).toHaveCount(0);
+  expect((await savedItems(page))[0]).toEqual(before);
 });
 
 test('browser leave warning appears only after changes and allows staying', async ({ page }) => {

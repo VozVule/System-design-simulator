@@ -28,7 +28,8 @@
   });
   export function center(): { x: number; y: number } {
     const bounds = element.getBoundingClientRect();
-    return flow.screenToFlowPosition({ x: bounds.left + bounds.width / 2 - 95, y: bounds.top + bounds.height / 2 - 55 });
+    const position = flow.screenToFlowPosition({ x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 });
+    return { x: position.x - 97, y: position.y - 90 };
   }
   export async function fit(): Promise<void> {
     await tick();

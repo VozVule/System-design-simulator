@@ -23,6 +23,7 @@ svg { flex-shrink: 0; }
 .architecture-title input:hover { background: #f7f8fa; }
 .save-state { display: flex; align-items: center; gap: 6px; color: #759184; font-size: 11px; white-space: nowrap; }
 .save-state.changed { color: #967a3e; }
+.save-state.saving, .save-state.saved { color: #087f3f; font-weight: 700; }
 .header-actions { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; }
 .quiet { padding: 8px 11px; border-radius: 7px; font-size: 12px; color: #626b7c; }
 .quiet:hover, .quiet.active { background: #f1f0f8; color: #6554c9; }
@@ -43,7 +44,7 @@ h1, h2, h3, p { margin: 0; }
 .component-list { display: flex; flex-direction: column; gap: 9px; }
 .palette-component { border: 1px solid #e9ebf0; background: #fff; border-radius: 9px; padding: 13px 10px; gap: 10px; justify-content: flex-start; text-align: left; }
 .palette-component:hover { background: #faf9ff; border-color: #d0c8ed; box-shadow: 0 3px 10px #403c6607; }
-.component-icon, .node-icon { color: var(--component-color); background: color-mix(in srgb, var(--component-color) 9%, white); border: 1px solid color-mix(in srgb, var(--component-color) 14%, white); border-radius: 8px; width: 35px; height: 35px; display: grid; place-items: center; flex-shrink: 0; }
+.component-icon { color: var(--component-color); background: color-mix(in srgb, var(--component-color) 9%, white); border: 1px solid color-mix(in srgb, var(--component-color) 14%, white); border-radius: 8px; width: 35px; height: 35px; display: grid; place-items: center; flex-shrink: 0; }
 .component-copy { display: flex; flex-direction: column; gap: 5px; flex: 1; }
 .component-copy strong { font-size: 11px; font-weight: 570; }
 .component-copy small { font-size: 9px; color: #9ba1ae; letter-spacing: -.1px; }
@@ -57,14 +58,14 @@ h1, h2, h3, p { margin: 0; }
 .canvas { flex: 1; position: relative; min-height: 0; outline: none; }
 .svelte-flow { --xy-background-color: #f5f6f8; --xy-node-border-default: none; --xy-node-background-color-default: transparent; --xy-handle-background-color-default: #fff; --xy-handle-border-color-default: #afb5c4; }
 .svelte-flow__node-component { border-radius: 11px; }
-.architecture-node { width: 194px; min-height: 116px; border: 1px solid #dfe3eb; border-radius: 10px; padding: 13px 15px; background: #fff; box-shadow: 0 4px 12px #2c344309; }
-.architecture-node.chosen { border-color: #8070d4; box-shadow: 0 0 0 3px #8070d41c, 0 5px 16px #4540600a; }
-.node-heading { display: flex; align-items: center; gap: 8px; }
-.node-icon { width: 28px; height: 28px; border-radius: 7px; }
-.node-icon svg { width: 17px; height: 17px; }
-.node-type { font-size: 10px; color: #959ba8; font-weight: 500; }
-.node-label { font-size: 13px; font-weight: 600; margin: 9px 0 8px; max-width: 164px; overflow-wrap: anywhere; }
-.node-summary { font-size: 10px; color: #959ba8; }
+.architecture-node { width: 194px; border: 1px solid transparent; border-radius: 12px; padding: 8px 14px 12px; text-align: center; }
+.architecture-node.chosen { border-color: #8070d4; background: #eeebfb80; box-shadow: 0 0 0 3px #8070d41c; }
+.node-symbol { position: relative; width: 112px; height: 112px; margin: 0 auto; color: var(--component-color); --symbol-fill: #fff; }
+.node-symbol > svg { display: block; filter: drop-shadow(0 3px 3px #2c34430d); }
+.node-symbol .svelte-flow__handle { border-color: var(--component-color); }
+.node-type { font-size: 10px; color: #707989; font-weight: 500; }
+.node-label { font-size: 13px; font-weight: 600; margin: 8px 0 4px; max-width: 164px; overflow-wrap: anywhere; }
+.node-summary { font-size: 10px; color: #818a99; margin-top: 5px; }
 .node-summary strong { font-weight: 550; color: #697487; }
 .svelte-flow__handle { width: 9px; height: 9px; border-width: 1.5px; }
 .svelte-flow__handle.connectionindicator:hover { border-color: #6554c9; }

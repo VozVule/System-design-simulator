@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { captureSave, clearElementDrafts, discardEditor, editField, finishSave, isDirty, newEditor, openEditor } from '../src/lib/editor';
+import { applySaveErrors, captureSave, clearElementDrafts, discardEditor, editField, finishSave, isDirty, newEditor, openEditor } from '../src/lib/editor';
 import { newComponent } from '../src/lib/domain';
 import type { Architecture, ArchitectureWrite } from '../src/lib/domain';
 const saved = (write: ArchitectureWrite): Architecture => ({ ...structuredClone(write), name: write.name.trim(), id: 'df0748cc-6f1e-48dd-bc32-1a85848a2f32', created_at: '2026-10-03T10:00:00.000Z', updated_at: '2026-10-03T10:00:00.000Z' });
@@ -43,5 +43,20 @@ describe('working editor state', () => {
   it('clears only drafts of removed elements', () => {
     const state = newEditor(); state.drafts = { 'node:a:label': '', 'node:b:label': '' }; state.errors = { ...state.drafts };
     expect(clearElementDrafts(state, ['a']).errors).toEqual({ 'node:b:label': '' });
+  });
+  it('maps backend field pointers through the submitted node IDs after array edits', () => {
+    const state = newEditor(); state.write.document.nodes.push(newComponent('server', { x: 0, y: 0 }, 'a'), newComponent('server', { x: 10, y: 10 }, 'b'));
+    const submitted = captureSave(state); state.write.document.nodes.shift();
+    const next = applySaveErrors(state, submitted, [{ location: 'body', path: '/document/nodes/1/capacity_rps', code: 'invalid_value', message: 'Server rejected capacity.' }]);
+    expect(next.errors).toEqual({ 'node:b:capacity_rps': 'Server rejected capacity.' }); expect(next.write).toEqual(state.write); expect(next.baseline).toEqual(state.baseline);
+  });
+  it('does not attach stale server errors to fields corrected during a pending Save', () => {
+    let state = newEditor(); state.write.document.nodes.push(newComponent('server', { x: 0, y: 0 }, 'a'));
+    const submitted = captureSave(state); state = editField(state, 'node:a:capacity_rps', '200'); state = editField(state, 'name', 'Newer');
+    expect(applySaveErrors(state, submitted, [
+      { location: 'body', path: '/document/nodes/0/capacity_rps', code: 'invalid_value', message: 'Capacity rejected.' },
+      { location: 'body', path: '/name', code: 'invalid_value', message: 'Name rejected.' },
+      { location: 'path', path: '/architecture_id', code: 'invalid_value', message: 'ID rejected.' },
+    ]).errors).toEqual({});
   });
 });

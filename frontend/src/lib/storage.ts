@@ -3,6 +3,7 @@ import { ArchitectureError, clone, equal, validateArchitecture, validateWrite } 
 import type { Architecture, ArchitectureSummary, ArchitectureWrite } from './domain';
 
 export interface ArchitectureStore {
+  readonly storageKind: 'backend' | 'browser';
   create(write: ArchitectureWrite): Promise<Architecture>;
   list(): Promise<ArchitectureSummary[]>;
   get(id: string): Promise<Architecture>;
@@ -14,6 +15,7 @@ const envelopeSchema = z.strictObject({ store_version: z.literal(1), items: z.ar
 type StoragePort = Pick<Storage, 'getItem' | 'setItem'>;
 
 export class BrowserArchitectureStore implements ArchitectureStore {
+  readonly storageKind = 'browser';
   constructor(private readonly storage: () => StoragePort = () => window.localStorage, private readonly now: () => number = Date.now) {}
   private read(): Architecture[] {
     let text: string | null;

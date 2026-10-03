@@ -6,13 +6,13 @@
   import ComponentIcon from './components/ComponentIcon.svelte';
   import Field from './components/Field.svelte';
   import Modal from './components/Modal.svelte';
-  import { catalog, clone, connect, destinations, equal, newComponent, removeElements, reorder, typeName, weightPercent } from './lib/domain';
+  import { ArchitectureError, catalog, clone, connect, destinations, equal, newComponent, removeElements, reorder, typeName, weightPercent } from './lib/domain';
   import type { ArchitectureDocument, ArchitectureSummary, ComponentType } from './lib/domain';
-  import { captureSave, clearElementDrafts, discardEditor, editField, fieldValue, finishSave, isDirty, newEditor, openEditor } from './lib/editor';
-  import { BrowserArchitectureStore } from './lib/storage';
+  import { applySaveErrors, captureSave, clearElementDrafts, discardEditor, editField, fieldValue, finishSave, isDirty, newEditor, openEditor } from './lib/editor';
+  import { HttpArchitectureStore } from './lib/http-storage';
   import type { ArchitectureStore } from './lib/storage';
 
-  let { store = new BrowserArchitectureStore() }: { store?: ArchitectureStore } = $props();
+  let { store = new HttpArchitectureStore() }: { store?: ArchitectureStore } = $props();
   let editor = $state.raw(newEditor());
   let selected = $state<string | null>(null), canvas: Canvas;
   let libraryOpen = $state(false), library = $state<ArchitectureSummary[]>([]), loading = $state(false), libraryError = $state('');
@@ -96,7 +96,10 @@
         const result = id ? await store.replace(id, snapshot) : await store.create(snapshot);
         editor = finishSave(editor, snapshot, result);
         await refreshLibrary(); return true;
-      } catch (cause) { error = message(cause); saveFailed = true; return false; }
+      } catch (cause) {
+        if (cause instanceof ArchitectureError) editor = applySaveErrors(editor, snapshot, cause.response.error.details);
+        error = message(cause); saveFailed = true; return false;
+      }
       finally { saving = false; pendingSave = null; }
     })();
     return pendingSave;
@@ -164,7 +167,7 @@
     <div class="brand" aria-label="System Design Studio"><span class="brand-icon"><Network size={21} /></span><span>System Design<span class="brand-subtitle">STUDIO</span></span></div>
     <div class="header-divider"></div>
     <div class="architecture-title"><PencilLine size={14} /><input aria-label="Architecture name" value={fieldValue(editor, 'name', editor.write.name)} aria-invalid={!!editor.errors.name} oninput={(e) => field('name', e.currentTarget.value)} disabled={locked} autocomplete="off" /></div>
-    <span class="save-state" class:changed={dirty || saveFailed} role="status">{#if saving}<LoaderCircle size={13} class="spin" />{:else if editor.id && !dirty && !saveFailed}<Check size={13} />{:else}<Circle size={7} fill="currentColor" />{/if}{status}</span>
+    <span class="save-state" class:changed={dirty || saveFailed} class:saving={saving} class:saved={!!editor.id && !dirty && !saveFailed && !saving} role="status">{#if saving}<LoaderCircle size={13} class="spin" />{:else if editor.id && !dirty && !saveFailed}<Check size={13} />{:else}<Circle size={7} fill="currentColor" />{/if}{status}</span>
     <nav class="header-actions" aria-label="Architecture actions"><button class="quiet" onclick={() => requestNavigation({ type: 'new' })} disabled={locked}><Plus size={16} />New</button><button class="quiet" class:active={libraryOpen} onclick={() => { libraryOpen = !libraryOpen; if (libraryOpen) void refreshLibrary(); }} disabled={locked}><FolderOpen size={16} />Library</button><button class="primary" aria-label={saveFailed ? "Retry Save" : "Save"} onclick={save} disabled={saveDisabled}><Save size={16} />{saveFailed ? 'Retry Save' : 'Save'}<kbd>⌘ S</kbd></button></nav>
   </header>
 
@@ -218,12 +221,12 @@
     </aside>
   </main>
 
-  <footer class="app-footer"><span><span class="local-dot"></span>Local workspace</span><span>{document.nodes.length} components<span class="footer-dot">·</span>{document.edges.length} connections</span><span>Saved in this browser<span class="footer-dot">·</span>Simulation coming later</span></footer>
+  <footer class="app-footer"><span><span class="local-dot"></span>Local workspace</span><span>{document.nodes.length} components<span class="footer-dot">·</span>{document.edges.length} connections</span><span>{store.storageKind === 'backend' ? 'Saved to local library' : 'Saved in this browser'}<span class="footer-dot">·</span>Simulation coming later</span></footer>
 </div>
 
 {#if libraryOpen}
   <Modal title="Architecture library" oncancel={() => libraryOpen = false}>
-    <p class="dialog-description">Browser-local placeholders. Saved architectures stay in this browser profile and frontend origin.</p>
+    <p class="dialog-description">{store.storageKind === 'backend' ? 'Saved architectures are stored by the local backend and can be reopened from this library.' : 'Browser-local placeholders. Saved architectures stay in this browser profile and frontend origin.'}</p>
     <div class="library-toolbar"><span>{library.length} saved {library.length === 1 ? 'architecture' : 'architectures'}</span><button class="quiet" onclick={refreshLibrary} disabled={loading}><RefreshCw size={14} />Refresh</button></div>
     {#if loading}<p class="library-empty">Loading your library…</p>{:else if libraryError}<div class="dialog-error" role="alert">{libraryError}<button onclick={refreshLibrary}>Retry</button></div>{:else if !library.length}<div class="library-empty"><FolderOpen size={28} /><h3>Your next idea belongs here.</h3><p>Save an architecture to find it in your library.</p><button class="secondary" onclick={() => { libraryOpen = false; void requestNavigation({ type: 'new' }); }}><Plus size={15} />New architecture</button></div>{:else}<div class="library-list">{#each library as item}<div class="library-item"><div class="library-item-icon"><Network size={19} /></div><div class="library-item-copy"><strong>{item.name}</strong><span>Saved {date(item.updated_at)}</span><small>Created {date(item.created_at)} · {item.id.slice(0, 8)}</small></div><button class="secondary" disabled={locked} aria-label={'Open ' + item.name + ' ' + item.id.slice(0, 8)} onclick={() => { libraryOpen = false; void requestNavigation({ type: 'open', id: item.id }); }}>Open</button><button class="icon-button delete-button" disabled={locked} aria-label={'Delete ' + item.name + ' ' + item.id.slice(0, 8)} onclick={() => { libraryOpen = false; void askDelete(item); }}><Trash2 size={16} /></button></div>{/each}</div>{/if}
     <div class="dialog-actions"><button class="secondary" onclick={() => libraryOpen = false}>Close</button></div>
@@ -240,7 +243,7 @@
 {/if}
 {#if deleteTarget}
   <Modal title="Delete saved architecture?" oncancel={() => { if (!deleting) deleteTarget = null; }}>
-    <p class="dialog-description">Delete “{deleteTarget.name}” from this browser’s saved library?{#if deleteTarget.id === editor.id} The active editor will be reset.{#if dirty} Its unsaved changes will also be discarded.{/if}{/if} This cannot be undone.</p>
+    <p class="dialog-description">Delete “{deleteTarget.name}” from the {store.storageKind === 'backend' ? 'local architecture' : 'browser’s saved'} library?{#if deleteTarget.id === editor.id} The active editor will be reset.{#if dirty} Its unsaved changes will also be discarded.{/if}{/if} This cannot be undone.</p>
     {#if error}<p class="dialog-error" role="alert">{error}</p>{/if}
     <div class="dialog-actions"><button class="secondary" disabled={deleting} onclick={() => deleteTarget = null}>Cancel</button><button class="danger" disabled={deleting} onclick={confirmDelete}>{deleting ? 'Deleting…' : 'Delete architecture'}</button></div>
   </Modal>

@@ -8,6 +8,7 @@ export function controlledStore(): ArchitectureStore {
   let gate: Promise<void> | null = null, release: (() => void) | undefined;
   window.__studioTest = { holdNextSave: () => { gate = new Promise<void>((resolve) => release = resolve); }, releaseSave: () => { release?.(); gate = null; } };
   return {
+    storageKind: 'browser',
     create: async (write) => { if (gate) await gate; return store.create(write); },
     replace: async (id, write) => { if (gate) await gate; return store.replace(id, write); },
     list: () => store.list(), get: (id) => store.get(id), delete: (id) => store.delete(id),

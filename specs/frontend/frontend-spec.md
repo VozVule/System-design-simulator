@@ -3,6 +3,8 @@
 Date: 2026-10-03
 Status: Approved by the user on 2026-10-03 and implemented in browser-local placeholder mode for release 1, milestone 1. The user confirmed browser acceptance tests plus separate editor/domain unit tests.
 
+Subsequent integration: the user requested wiring to the implemented backend. The [backend integration spec](backend-integration-spec.md) supersedes the browser-only persistence requirements below; the canvas/editor behavior remains applicable.
+
 ## Problem Statement
 
 The user needs to create architectures, explicitly save them, reopen them, and modify their topology and configuration through a canvas. At specification authoring, the repository contained product decisions and an approved architecture-library API contract, but no frontend or backend implementation.
@@ -91,6 +93,7 @@ Keep saved documents compatible with the existing OpenAPI design contract. The p
 
 - Keep the canvas as the primary editing surface. Inspectors are tied to canvas selection; do not add a raw JSON editor as the way to modify architectures.
 - Render the component type and label distinctly on each node. Compact configuration summaries may show test RPS or configured maximum RPS; those values are configuration, not measured results.
+- Use the type-specific canvas symbols in [the canvas visual specification](canvas-visuals-spec.md) so that component types remain recognizable when labels change. These replace the initial small-icon cards.
 - Use a desktop browser layout that keeps the canvas usable while palette, library, or inspector panels are open. At narrower desktop widths, panels may collapse or open as drawers. Touch-specific mobile canvas behavior is outside this milestone.
 - A clean first visit opens an empty new architecture and an empty saved library. Do not automatically insert sample architectures or repopulate deleted entries. Fixtures belong to development and tests.
 
@@ -154,6 +157,7 @@ All new components must be complete, correctly typed objects before the user sup
 - New creates an empty document with format_version 1 and a valid editable default name, Untitled architecture. It has no saved ID. A pristine new document can be abandoned without a prompt, and Save can explicitly create even that empty document.
 - For an opened architecture, compute changed state from the working name/document relative to the last successful saved baseline, plus outstanding invalid form edits. Compare object content independently of object-key order while preserving array order. Returning all content to the baseline clears changed state. A new document becomes changed when edited from its pristine state.
 - Distinguish New/unsaved, Saved, Unsaved changes, Saving, and Save failed with text. Keep Save available for a valid new architecture and a valid changed architecture. Invalid fields block persistence and provide actionable feedback. A clean saved architecture needs no repeat Save.
+- Display Saving and Saved in a strong, brighter green with bold text (700 weight), including their spinner/check icon. Saving must retain this style while the captured document is still dirty. Unsaved changes and Save failed must remain visually distinct and must not use the successful-save style.
 - Capture an immutable name/document snapshot when Save starts. First Save calls the placeholder create operation; subsequent Saves call complete replacement for the same architecture ID. Permit only one Save in flight per active architecture and prevent double-clicks or shortcuts from creating duplicate entries.
 - Ordinary Save may leave canvas/configuration editing enabled. On success, adopt returned metadata and the authoritative saved snapshot as the baseline. If edits occurred after capture, retain them and keep the document changed. Apply name normalization to a current field only when that field has not been edited since capture. Later Save of a first-created document replaces the returned ID rather than creating another entry.
 - A failed Save leaves the working document and form drafts intact, retains changed state, and does not replace the previous baseline or library entry. Show the cause and a Retry action. No automatic retry of first Save creates additional entries.

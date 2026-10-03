@@ -1,6 +1,8 @@
-# System Design Simulator backend
+# System Design Simulator
 
 Release 1 milestone 1 provides a local architecture library API backed by SQLite. Canvas editing stays in the frontend; POST is the first Save and PUT saves a complete replacement of an existing architecture.
+
+The frontend's Save button now uses those POST/PUT endpoints. Library/Open/Delete use the same backend library. See the [frontend README](frontend/README.md) for editor usage, API origin configuration, and frontend verification.
 
 Use Python 3.12 and the repository's `.venv` for all backend work. The environment has already been created in this workspace. To recreate it from the repository root:
 

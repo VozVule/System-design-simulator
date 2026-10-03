@@ -1,5 +1,5 @@
 import { ArchitectureError, clone, equal, validateWrite } from './domain';
-import type { Architecture, ArchitectureWrite } from './domain';
+import type { Architecture, ArchitectureWrite, ErrorDetail } from './domain';
 
 export interface EditorState {
   write: ArchitectureWrite;
@@ -65,4 +65,25 @@ export function discardEditor(state: EditorState): EditorState {
 export function clearElementDrafts(state: EditorState, removed: string[]): EditorState {
   const keep = ([key]: [string, string]): boolean => !removed.includes(key.split(':')[1]);
   return { ...state, drafts: Object.fromEntries(Object.entries(state.drafts).filter(keep)), errors: Object.fromEntries(Object.entries(state.errors).filter(keep)) };
+}
+
+/** Map server pointers through the submitted snapshot, not a possibly edited node-array index. */
+export function applySaveErrors(state: EditorState, submitted: ArchitectureWrite, details: ErrorDetail[]): EditorState {
+  const errors = { ...state.errors };
+  for (const detail of details) {
+    if (detail.location !== 'body') continue;
+    if (detail.path === '/name' && state.write.name === submitted.name) { errors.name = detail.message; continue; }
+    const match = /^\/document\/(nodes|edges)\/(\d+)\/(label|caller_count|test_rps|capacity_rps|weight|position\/[xy])$/.exec(detail.path);
+    if (!match) continue;
+    const [collection, index, pointer] = match.slice(1);
+    const old = collection === 'nodes' ? submitted.document.nodes[Number(index)] : submitted.document.edges[Number(index)];
+    const current = collection === 'nodes' ? state.write.document.nodes.find((n) => n.id === old?.id) : state.write.document.edges.find((e) => e.id === old?.id);
+    if (!old || !current) continue;
+    const read = (item: typeof old): unknown => {
+      if (pointer === 'position/x' || pointer === 'position/y') return 'position' in item ? item.position[pointer.endsWith('x') ? 'x' : 'y'] : undefined;
+      return Object.entries(item).find(([key]) => key === pointer)?.[1];
+    };
+    if (equal(read(current), read(old))) errors[`${collection === 'nodes' ? 'node' : 'edge'}:${old.id}:${pointer.replace('position/', '')}`] = detail.message;
+  }
+  return { ...state, errors };
 }

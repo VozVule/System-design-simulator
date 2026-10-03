@@ -28,7 +28,18 @@ export type Architecture = z.infer<typeof architectureSchema>;
 export type ArchitectureSummary = Omit<Architecture, 'document'> & { format_version: 1 };
 export type DetailCode = 'required' | 'unknown_field' | 'invalid_type' | 'invalid_value' | 'unsupported_document_version' | 'duplicate_id' | 'missing_endpoint' | 'duplicate_connection' | 'duplicate_order' | 'self_connection' | 'cycle' | 'forbidden_incoming' | 'too_many_outgoing' | 'forbidden_outgoing';
 export interface ErrorDetail { location: 'body' | 'path'; path: string; code: DetailCode; message: string }
-export interface ErrorResponse { error: { code: 'validation_error' | 'unsupported_document_version' | 'architecture_not_found' | 'storage_unavailable' | 'internal_error'; message: string; details: ErrorDetail[] } }
+export interface ErrorResponse { error: { code: 'invalid_json' | 'unsupported_media_type' | 'validation_error' | 'unsupported_document_version' | 'architecture_not_found' | 'storage_unavailable' | 'internal_error'; message: string; details: ErrorDetail[] } }
+export const architectureListSchema = z.strictObject({ items: z.array(z.strictObject({
+  id: architectureSchema.shape.id, name: label, created_at: timestamp, updated_at: timestamp, format_version: z.literal(1),
+})) });
+export const errorResponseSchema = z.strictObject({ error: z.strictObject({
+  code: z.enum(['invalid_json', 'unsupported_media_type', 'validation_error', 'unsupported_document_version', 'architecture_not_found', 'storage_unavailable', 'internal_error']),
+  message: z.string().min(1), details: z.array(z.strictObject({
+    location: z.enum(['body', 'path']), path: z.string().regex(/^(|\/.*)$/),
+    code: z.enum(['required', 'unknown_field', 'invalid_type', 'invalid_value', 'unsupported_document_version', 'duplicate_id', 'missing_endpoint', 'duplicate_connection', 'duplicate_order', 'self_connection', 'cycle', 'forbidden_incoming', 'too_many_outgoing', 'forbidden_outgoing']),
+    message: z.string().min(1),
+  })),
+}) });
 export class ArchitectureError extends Error {
   readonly response: ErrorResponse;
   constructor(code: ErrorResponse['error']['code'], message: string, details: ErrorDetail[] = []) {
