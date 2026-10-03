@@ -1,5 +1,14 @@
 # Project instructions
 
+## Commit messages
+
+- Every commit message must use the format `<type>: <description>` and start with `chore:`, `fix:`, or `feat:`.
+- Use `chore` for maintenance, `fix` for defect corrections, and `feat` for new features. The description must state what was done.
+
+## Explanations of completed work
+
+- When the user asks you to explain what was done, write the response in ASD-STE100 Simplified Technical English.
+
 ## Specifications
 
 - Store backend specifications and API contracts in `specs/backend`.
