@@ -1,7 +1,7 @@
 # Release 1 contract
 
 Date: 2026-10-03
-Status: Agreed on 2026-10-03 after the Database and caching scope update. Design interview complete; implementation has not been requested or started.
+Status: Design agreed on 2026-10-03 after the Database and caching scope update. Backend CRUD/Save milestone implemented and verified; simulation remains a later milestone.
 
 ## Purpose and delivery
 
@@ -10,6 +10,8 @@ A general architecture simulator and visualizer for local use, with release 1 ta
 ### Delivery sequence
 
 On 2026-10-03, the user selected architecture CRUD and explicit Save as the first release milestone, before the simulation engine. Its backend/frontend contracts are described in the [backend API specification](../specs/backend/backend-api-spec.md), with a companion [OpenAPI design contract](../specs/backend/backend-api.openapi.json). The milestone requires enforced Python type declarations, HTTP integration tests with SQLite, and separate domain unit tests. The API specification was approved by the user; this sequencing does not change the agreed simulation behavior below.
+
+The backend milestone is implemented with five CRUD endpoints, durable SQLite storage, generated API documentation, 73 passing domain/HTTP/contract tests, and strict static type checks. Setup and startup commands are in the [README](../README.md); the separate standards and specification reviews are recorded in [backend review](backend-review.md).
 
 ## Recorded decisions
 

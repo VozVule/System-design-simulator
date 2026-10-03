@@ -1,7 +1,7 @@
 # Design interview
 
 Date started: 2026-10-03
-Status: Complete. The user confirmed the updated release 1 design on 2026-10-03. Implementation has not been requested or started.
+Status: Complete. The user confirmed the updated release 1 design on 2026-10-03. Subsequent implementation progress is tracked in the release 1 contract; the interview rounds below remain historical records.
 
 The rounds below preserve the interview history. Earlier references to open decisions or pending confirmation are superseded by the agreed [release 1 contract](release-1.md) and the closing confirmation at the end of this document.
 

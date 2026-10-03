@@ -1,7 +1,7 @@
 # Backend architecture API specification
 
 Date: 2026-10-03
-Status: Approved by the user on 2026-10-03 for release 1, milestone 1. HTTP integration tests and separate domain unit tests were requested by the user. Backend implementation is a subsequent task.
+Status: Approved and implemented on 2026-10-03 for release 1, backend milestone 1. Verification passed: 73 tests, strict mypy, OpenAPI validation, and standards/spec review. Simulation remains a subsequent milestone.
 
 ## Problem Statement
 
