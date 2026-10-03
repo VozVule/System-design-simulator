@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, untrack } from 'svelte';
+  import { onDestroy, tick, untrack } from 'svelte';
   import { SvelteFlow, Background, BackgroundVariant, MarkerType, MiniMap, useSvelteFlow } from '@xyflow/svelte';
   import type { Edge } from '@xyflow/svelte';
   import { ZoomIn, ZoomOut, Maximize2, MousePointer2 } from '@lucide/svelte';
@@ -19,6 +19,11 @@
   } = $props();
   let nodes = $state.raw<CanvasNode[]>([]), edges = $state.raw<Edge[]>([]);
   let element: HTMLDivElement;
+  let focusObserver: MutationObserver | null = null, focusId: string | null = null;
+  onDestroy(() => focusObserver?.disconnect());
+  $effect(() => {
+    if (focusId !== selected) { focusObserver?.disconnect(); focusObserver = null; focusId = null; }
+  });
   const flow = useSvelteFlow<CanvasNode>();
   const nodeTypes = { component: ArchitectureNode }, edgeTypes = { connection: ArchitectureEdge };
   $effect(() => {
@@ -34,6 +39,36 @@
   export async function fit(): Promise<void> {
     await tick();
     if (nodes.length) { await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); await flow.fitView({ padding: 0.2, maxZoom: 1, duration: 180 }); }
+  }
+  export function pastePosition(origin: { x: number; y: number }, count: number): { x: number; y: number } {
+    const bounds = element.getBoundingClientRect(), position = { x: origin.x + count * 32, y: origin.y + count * 32 };
+    const available = (point: { x: number; y: number }): boolean => {
+      const screen = flow.flowToScreenPosition(point), end = flow.flowToScreenPosition({ x: point.x + 194, y: point.y + 190 });
+      return screen.x >= bounds.left + 2 && screen.y >= bounds.top + 2 && end.x <= bounds.right - 2 && end.y <= bounds.bottom - 2
+        && !document.nodes.some((node) => Math.abs(node.position.x - point.x) < 8 && Math.abs(node.position.y - point.y) < 8);
+    };
+    if (available(position)) return position;
+    const middle = center(); if (available(middle)) return middle;
+    // An offscreen source or a new document should still get distinct, visible pastes.
+    for (let ring = 1; ring <= 8; ring++) for (let x = -ring; x <= ring; x++) for (let y = -ring; y <= ring; y++) {
+      if (Math.max(Math.abs(x), Math.abs(y)) !== ring) continue;
+      const point = { x: middle.x + x * 32, y: middle.y + y * 32 }; if (available(point)) return point;
+    }
+    return middle;
+  }
+  export async function focusComponent(id: string): Promise<void> {
+    focusObserver?.disconnect(); await tick(); if (selected !== id) return;
+    focusId = id;
+    const ready = (): void => {
+      const target = element.querySelector<HTMLElement>(`.svelte-flow__node[data-id="${CSS.escape(id)}"]`);
+      // New Flow nodes remain hidden until their measured bounds and handles are ready.
+      if (!target || getComputedStyle(target).visibility === 'hidden') return;
+      focusObserver?.disconnect(); focusObserver = null; focusId = null;
+      target.focus({ preventScroll: true });
+    };
+    focusObserver = new MutationObserver(ready);
+    focusObserver.observe(element, { subtree: true, childList: true, attributes: true, attributeFilter: ['style'] });
+    ready();
   }
   function positions(items: CanvasNode[]): void { onpositions(items.map((n) => ({ id: n.id, x: n.position.x, y: n.position.y }))); }
   function drop(event: DragEvent): void {

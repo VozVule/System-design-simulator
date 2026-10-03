@@ -6,6 +6,8 @@
   import ComponentIcon from './components/ComponentIcon.svelte';
   import Field from './components/Field.svelte';
   import Modal from './components/Modal.svelte';
+  import PanelDivider from './components/PanelDivider.svelte';
+  import { copyComponent, duplicateComponent, readComponentClipboard } from './lib/clipboard';
   import { ArchitectureError, catalog, clone, connect, destinations, equal, newComponent, removeElements, reorder, typeName, weightPercent } from './lib/domain';
   import type { ArchitectureDocument, ArchitectureSummary, ComponentType } from './lib/domain';
   import { applySaveErrors, captureSave, clearElementDrafts, discardEditor, editField, fieldValue, finishSave, isDirty, newEditor, openEditor } from './lib/editor';
@@ -21,6 +23,14 @@
   type Navigation = { type: 'new' } | { type: 'open'; id: string };
   let navigation = $state<Navigation | null>(null), deleteTarget = $state<ArchitectureSummary | null>(null);
   let connectionTarget = $state(''), redirectSource = $state(''), redirectTarget = $state('');
+  let paletteWidth = $state(246), inspectorWidth = $state(286), workspaceWidth = $state(1280);
+  let clipboardText = '', pasteCount = 0;
+  let clipboardNotice = $state('');
+  const panelSpace = $derived(Math.max(264, workspaceWidth - 216));
+  const shownInspector = $derived(Math.min(inspectorWidth, Math.max(200, panelSpace - 64)));
+  const shownPalette = $derived(Math.min(paletteWidth, Math.max(64, panelSpace - shownInspector)));
+  const paletteMax = $derived(Math.max(64, Math.min(400, workspaceWidth - shownInspector - 216)));
+  const inspectorMax = $derived(Math.max(200, Math.min(480, workspaceWidth - shownPalette - 216)));
   const dirty = $derived(isDirty(editor));
   const locked = $derived(navigationSaving || opening || deleting);
   const document = $derived(editor.write.document);
@@ -45,6 +55,32 @@
   }
   function field(key: string, text: string): void { if (!locked) { editor = editField(editor, key, text); error = ''; saveFailed = false; } }
   function select(id: string | null): void { selected = id; }
+  function clipboardAvailable(event: ClipboardEvent): boolean {
+    const target = event.target;
+    return !locked && !libraryOpen && !navigation && !deleteTarget && !(target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
+  }
+  function copy(event: ClipboardEvent): void {
+    if (!clipboardAvailable(event) || !node || !event.clipboardData) return;
+    event.preventDefault();
+    try {
+      const text = copyComponent(editor, node.id);
+      event.clipboardData.setData('text/plain', text); clipboardText = text; pasteCount = 0;
+      clipboardNotice = `Copied ${node.label}. Paste with Ctrl/Cmd+V.`;
+    } catch (cause) { error = message(cause); }
+  }
+  function paste(event: ClipboardEvent): void {
+    if (!clipboardAvailable(event) || !event.clipboardData) return;
+    const text = event.clipboardData.getData('text/plain');
+    try {
+      const copied = readComponentClipboard(text); if (!copied) return;
+      event.preventDefault();
+      if (clipboardText !== text) { clipboardText = text; pasteCount = 0; }
+      const component = duplicateComponent(document, copied, canvas.pastePosition(copied.position, ++pasteCount));
+      changeDocument({ ...clone(document), nodes: [...document.nodes, component] }); selected = component.id;
+      void canvas.focusComponent(component.id);
+      clipboardNotice = `Pasted ${component.label}.`;
+    } catch (cause) { event.preventDefault(); error = message(cause); }
+  }
   function add(type: ComponentType, at?: { x: number; y: number }): void {
     if (locked) return;
     const point = at ?? canvas.center();
@@ -160,7 +196,7 @@
   const date = (value: string): string => new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 </script>
 
-<svelte:window onkeydown={keydown} />
+<svelte:window onkeydown={keydown} oncopy={copy} onpaste={paste} />
 
 <div class="studio">
   <header class="app-header">
@@ -171,13 +207,15 @@
     <nav class="header-actions" aria-label="Architecture actions"><button class="quiet" onclick={() => requestNavigation({ type: 'new' })} disabled={locked}><Plus size={16} />New</button><button class="quiet" class:active={libraryOpen} onclick={() => { libraryOpen = !libraryOpen; if (libraryOpen) void refreshLibrary(); }} disabled={locked}><FolderOpen size={16} />Library</button><button class="primary" aria-label={saveFailed ? "Retry Save" : "Save"} onclick={save} disabled={saveDisabled}><Save size={16} />{saveFailed ? 'Retry Save' : 'Save'}<kbd>⌘ S</kbd></button></nav>
   </header>
 
-  <main class="workspace">
-    <aside class="palette" aria-label="Component palette">
+  <main class="workspace" bind:clientWidth={workspaceWidth} style:--palette-width={shownPalette + 'px'} style:--inspector-width={shownInspector + 'px'}>
+    <aside id="component-palette" class="palette" aria-label="Component palette">
       <div class="panel-heading"><span class="eyebrow">BUILD YOUR SYSTEM</span><h2>Components</h2><p>Drag onto the canvas or click to add.</p></div>
       <div class="component-list">{#each catalog as item}<button class="palette-component" draggable={!locked} ondragstart={(event) => drag(event, item.type)} onclick={() => add(item.type)} disabled={locked} aria-label={'Add ' + item.name}><span class="component-icon" style:--component-color={item.color}><ComponentIcon type={item.type} /></span><span class="component-copy"><strong>{item.name}</strong><small>{item.description}</small></span><Plus size={14} class="add-mark" /></button>{/each}</div>
       <div class="palette-note"><Layers size={17} /><div><strong>Designed one step at a time</strong><p>Incomplete architectures can be saved. Connect and configure them whenever you’re ready.</p></div></div>
       <div class="palette-bottom"><span class="release-tag">RELEASE 1</span><span>Architecture editor</span></div>
     </aside>
+
+    <PanelDivider label="Resize component palette" controls="component-palette" side="left" value={shownPalette} min={64} max={paletteMax} onchange={(value) => paletteWidth = value} />
 
     <div class="canvas-column">
       {#if error}<div class="error-banner" role="alert"><span>{error}</span>{#if saveFailed}<button onclick={save} disabled={saveDisabled}>Retry Save</button>{/if}<button aria-label="Dismiss error" onclick={() => error = ''}><X size={16} /></button></div>{/if}
@@ -185,7 +223,9 @@
       <SvelteFlowProvider><Canvas bind:this={canvas} {document} {selected} {locked} onselect={select} onpositions={positions} onconnect={connection} onremove={remove} onadd={add} /></SvelteFlowProvider>
     </div>
 
-    <aside class="inspector" aria-label="Configuration inspector">
+    <PanelDivider label="Resize configuration inspector" controls="configuration-inspector" side="right" value={shownInspector} min={200} max={inspectorMax} onchange={(value) => inspectorWidth = value} />
+
+    <aside id="configuration-inspector" class="inspector" aria-label="Configuration inspector">
       <div class="inspector-heading"><span><SlidersHorizontal size={17} />Inspector</span>{#if selected}<button class="icon-button" aria-label="Clear selection" onclick={() => selected = null}><X size={16} /></button>{/if}</div>
       <fieldset disabled={locked}>
       {#if node}
@@ -202,6 +242,7 @@
           {#if outgoing.length}{#each outgoing as destination, index}<div class="destination-row"><div class="destination-name"><button onclick={() => selected = destination.id}><ArrowUpRight size={14} />{document.nodes.find((n) => n.id === destination.target)?.label}</button>{#if router}<div class="order-buttons"><button aria-label={'Move up destination ' + (index + 1)} disabled={index === 0} onclick={() => changeDocument(reorder(document, destination.id, -1))}><ChevronUp size={13} /></button><button aria-label={'Move down destination ' + (index + 1)} disabled={index === outgoing.length - 1} onclick={() => changeDocument(reorder(document, destination.id, 1))}><ChevronDown size={13} /></button></div>{/if}</div>{#if (node.type === 'load_balancer' || node.type === 'gateway') && node.routing_policy === 'weighted'}<div class="weight-row"><Field label={'Weight for ' + (document.nodes.find((n) => n.id === destination.target)?.label ?? 'destination')} compact numeric value={fieldValue(editor, `edge:${destination.id}:weight`, destination.weight)} error={editor.errors[`edge:${destination.id}:weight`]} oninput={(text) => field(`edge:${destination.id}:weight`, text)} /><span>{weightPercent(document, destination)?.toFixed(1) ?? '—'}%</span></div>{/if}</div>{/each}{:else}<p class="muted">No outgoing connections yet.</p>{/if}
           {#if router && node && 'routing_policy' in node && node.routing_policy === 'weighted' && outgoing.length && outgoing.every((e) => e.weight === 0)}<p class="incomplete-hint">All weights are zero. You can save this draft and finish routing later.</p>{/if}
           {#if node.type !== 'database'}<div class="connection-controls"><label for="connect-target">Connect to</label><select id="connect-target" bind:value={connectionTarget}><option value="">Choose a component…</option>{#each document.nodes as target}<option value={target.id}>{target.label}</option>{/each}</select><button class="secondary" disabled={!connectionTarget} onclick={() => { if (node) connection(node.id, connectionTarget); }}>Connect<ArrowRight size={14} /></button></div>{/if}
+          <p class="copy-hint">Select on the canvas, then Ctrl/Cmd+C to copy and Ctrl/Cmd+V to paste.</p>
           <button class="danger-text" onclick={() => { if (node) remove([node.id], []); }}><Trash2 size={14} />Remove component</button>
         </div>
       {:else if edge}
@@ -223,6 +264,8 @@
 
   <footer class="app-footer"><span><span class="local-dot"></span>Local workspace</span><span>{document.nodes.length} components<span class="footer-dot">·</span>{document.edges.length} connections</span><span>{store.storageKind === 'backend' ? 'Saved to local library' : 'Saved in this browser'}<span class="footer-dot">·</span>Simulation coming later</span></footer>
 </div>
+
+<div class="visually-hidden" aria-live="polite" aria-atomic="true">{clipboardNotice}</div>
 
 {#if libraryOpen}
   <Modal title="Architecture library" oncancel={() => libraryOpen = false}>

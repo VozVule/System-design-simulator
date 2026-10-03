@@ -1,9 +1,11 @@
 # Frontend architecture editor specification
 
 Date: 2026-10-03
-Status: Approved by the user on 2026-10-03 and implemented in browser-local placeholder mode for release 1, milestone 1. The user confirmed browser acceptance tests plus separate editor/domain unit tests.
+Status: Phase-one implementation complete and ready for user acceptance testing. The initial specification was approved on 2026-10-03 and first implemented with browser-local placeholders. The user confirmed browser acceptance tests plus separate editor/domain unit tests.
 
 Subsequent integration: the user requested wiring to the implemented backend. The [backend integration spec](backend-integration-spec.md) supersedes the browser-only persistence requirements below; the canvas/editor behavior remains applicable.
+
+Phase-one scope: the [visual specification](canvas-visuals-spec.md) and [clipboard/resizable-panel specification](editor-productivity-spec.md) complete the requested editor scope. These changes are implemented alongside backend persistence. User acceptance testing remains the final confirmation; simulation belongs to a later phase.
 
 ## Problem Statement
 
@@ -95,6 +97,7 @@ Keep saved documents compatible with the existing OpenAPI design contract. The p
 - Render the component type and label distinctly on each node. Compact configuration summaries may show test RPS or configured maximum RPS; those values are configuration, not measured results.
 - Use the type-specific canvas symbols in [the canvas visual specification](canvas-visuals-spec.md) so that component types remain recognizable when labels change. These replace the initial small-icon cards.
 - Use a desktop browser layout that keeps the canvas usable while palette, library, or inspector panels are open. At narrower desktop widths, panels may collapse or open as drawers. Touch-specific mobile canvas behavior is outside this milestone.
+- The palette and inspector must be resizable through draggable, keyboard-accessible dividers. Their contents adapt to the panel width, as defined in [the editor productivity specification](editor-productivity-spec.md).
 - A clean first visit opens an empty new architecture and an empty saved library. Do not automatically insert sample architectures or repopulate deleted entries. Fixtures belong to development and tests.
 
 ### Domain document and canvas mapping
@@ -166,6 +169,7 @@ All new components must be complete, correctly typed objects before the user sup
 - While a Save is already pending, defer document-switching and deletion actions until it settles, then evaluate the guard against the latest working state. A delayed completion must never replace a different active architecture.
 - Register the browser's standard leave/stay warning while changes or form drafts exist, including during a pending Save. Remove it when clean. Follow the existing ADR's browser limitations: this warning is best effort, its text is browser-controlled, and it does not perform an asynchronous Save on unload.
 - Support the usual Save keyboard shortcut within the application. Delete/Backspace removes selected graph elements only when canvas focus is active; typing in form fields must never delete a node. Escape cancels a connection gesture or closes a dismissible panel without discarding work.
+- Support Ctrl/Cmd+C and Ctrl/Cmd+V for a selected component, including repeated paste and paste into another architecture. New IDs, copied configuration, offset positions, selected pasted components, and native text-field behavior follow [the editor productivity specification](editor-productivity-spec.md).
 
 ### Placeholder library and future persistence boundary
 
@@ -177,7 +181,7 @@ All new components must be complete, correctly typed objects before the user sup
 - Do not seed real user storage. Use contract-shaped fixtures for tests covering all five components, an empty document, a disconnected document, and weighted destinations including fractional/zero weights and nonconsecutive order values.
 - Surface unavailable storage, write/quota failure, corrupt stored resources, and unsupported store/document versions explicitly. Do not silently reset corrupt storage, clear the library, or claim a successful Save. Offer retry where useful; preserve any readable previous state and current edits. No in-memory fallback may present itself as a durable Save.
 - Missing entries return architecture_not_found; schema/graph failures use validation_error with the contract's detail codes; storage failures use storage_unavailable; corrupt resources use internal_error; unsupported document versions use unsupported_document_version. Each follows the ErrorResponse envelope with an always-present details array and applicable JSON Pointer locations. Browser-store version errors remain a local adapter error with a readable explanation.
-- A missing entry during Open leaves the current editor intact and permits refreshing the library. A missing saved ID during Save preserves the current work and reports the problem; it does not silently create a second architecture. Recovery through copying/exporting is deferred with those features.
+- A missing entry during Open leaves the current editor intact and permits refreshing the library. A missing saved ID during Save preserves the current work and reports the problem; it does not silently create a second architecture. Individual component copying is available; full architecture export remains deferred.
 - Show real operation states even if normal local operations resolve quickly. Tests may inject delayed completion and failures through the same store interface; do not add artificial user-facing latency or simulate failure randomly.
 - Later API wiring will map the store's operations to the agreed HTTP operations. It is a separate task and must preserve explicit Save, document replacement, IDs, form behavior, and error mapping. SQLite remains the agreed eventual backend persistence; browser storage is the temporary frontend placeholder.
 
