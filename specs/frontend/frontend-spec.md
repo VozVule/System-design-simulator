@@ -1,11 +1,11 @@
 # Frontend architecture editor specification
 
 Date: 2026-10-03
-Status: Specification for release 1, milestone 1. Frontend implementation is a subsequent task. The user confirmed browser acceptance tests plus separate editor/domain unit tests.
+Status: Approved by the user on 2026-10-03 and implemented in browser-local placeholder mode for release 1, milestone 1. The user confirmed browser acceptance tests plus separate editor/domain unit tests.
 
 ## Problem Statement
 
-The user needs to create architectures, explicitly save them, reopen them, and modify their topology and configuration through a canvas. The repository currently contains product decisions and an approved architecture-library API contract, but no frontend or backend implementation.
+The user needs to create architectures, explicitly save them, reopen them, and modify their topology and configuration through a canvas. At specification authoring, the repository contained product decisions and an approved architecture-library API contract, but no frontend or backend implementation.
 
 Waiting for the backend would prevent the architecture editor from being built and used. A static mockup would also be insufficient: adding components, changing connections, editing configuration, and saving must affect the architecture the user can reopen. The frontend must therefore work with local placeholders while preserving the future API's document shape and explicit Save behavior.
 
@@ -247,7 +247,7 @@ During implementation, require strict frontend type checking, both test suites, 
 
 ## Further Notes
 
-- The [release 1 contract](../../docs/release-1.md), [domain glossary](../../docs/glossary.md), and accepted [ADRs](../../docs/adr/) define the product vocabulary and settled rules. The [backend API specification](../backend/backend-api-spec.md) and [OpenAPI design contract](../backend/backend-api.openapi.json) define saved documents and future resource operations. The backend remains unimplemented; these references are design contracts.
+- The [release 1 contract](../../docs/release-1.md), [domain glossary](../../docs/glossary.md), and accepted [ADRs](../../docs/adr/) define the product vocabulary and settled rules. The [backend API specification](../backend/backend-api-spec.md) and [OpenAPI design contract](../backend/backend-api.openapi.json) define saved documents and future resource operations. The frontend implementation uses browser-local placeholders independently of backend availability.
 - This frontend milestone advances the existing architecture CRUD/Save sequence without changing the broader simulation agreement. Browser-local placeholder storage is a temporary implementation choice for the frontend, not a replacement for the agreed SQLite backend.
 - Palette values, application surfaces, browser-local storage, field-draft handling, and concrete canvas interactions are implementation defaults synthesized for this specification. They were not all individually selected in the prior interview. The testing seam was checked with the user, who requested separate editor/domain unit tests in addition to browser acceptance tests.
 - Issue-tracker publication is pending because no project tracker or triage configuration was supplied. Run `/setup-matt-pocock-skills`, then publish this specification to the configured tracker with the `ready-for-agent` label. No issue has been created by this task.
