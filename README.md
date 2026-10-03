@@ -10,7 +10,15 @@ python3.12 -m venv .venv
 .venv/bin/python -m pip install --no-build-isolation --no-deps -e .
 ```
 
-Start the application from the repository root:
+Start both the Python backend and Svelte frontend from the repository root (install frontend dependencies once with `npm --prefix frontend ci`):
+
+```bash
+./scripts/start.sh
+```
+
+Open the frontend at [http://127.0.0.1:5173](http://127.0.0.1:5173). The Bash launcher uses ports 8000 and 5173 and returns an error before starting either service if a port is occupied. Keep it running in the foreground; Ctrl+C stops both services. If either service exits, the other is stopped and the launcher returns an error.
+
+To run only the backend:
 
 ```bash
 .venv/bin/python -m uvicorn sysd_backend.main:app --host 127.0.0.1 --port 8000
