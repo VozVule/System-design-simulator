@@ -13,6 +13,12 @@ Requested by the user on 2026-10-03 as the final frontend phase-one scope. This 
 - The copied snapshot can be pasted repeatedly, after the original is removed, or into another architecture in the same application. Selection is not required for Paste. Copy alone does not make the architecture dirty; Paste does and persists only on an explicit Save.
 - Clipboard operations cannot mutate behind library/navigation/delete dialogs or while editing is locked. Normal Save permits newer paste edits; its eventual response must retain those edits and leave them unsaved until the next Save.
 
+## Canvas selection
+
+- Press V or use the canvas toolbar to switch between Drag mode (pan the canvas) and Select mode (drag a box around components). Ignore V in text fields and dialogs, and preserve Ctrl/Cmd+V for Paste.
+- Shift+click adds or removes individual items. Drag selected components or their selection box to move the group. Delete/Backspace or the inspector removal action removes all selected items and incident connections.
+- Group selection survives movement and edits. New/Open clears selection. Selection and mode changes do not mark the architecture dirty. The inspector shows properties for one selected item and group actions for multiple items.
+
 ## Adjustable responsive panels
 
 - The component palette and configuration inspector have independent vertical resize dividers. Pointer capture keeps resizing active when the pointer leaves the divider; release/cancel ends the operation.

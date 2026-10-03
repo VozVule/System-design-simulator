@@ -91,7 +91,8 @@ h1, h2, h3, p { margin: 0; }
 .empty-diagram i { width: 31px; height: 1px; background: #cbd0dd; }
 .canvas-tools { position: absolute; bottom: 25px; left: 23px; display: flex; padding: 4px; align-items: center; gap: 2px; border: 1px solid #e2e5ec; border-radius: 8px; background: #fff; box-shadow: 0 3px 9px #252b4006; }
 .canvas-tools button { width: 32px; height: 31px; border-radius: 5px; color: #7b8498; }
-.canvas-tools button:hover { background: #f1eef9; color: #6554c9; }
+.canvas-tools button[aria-pressed="true"] { background: #e6e0fa; color: #5542b1; }
+.canvas-tools button:hover:not(:disabled) { background: #f1eef9; color: #6554c9; }
 .canvas-tools span { height: 16px; width: 1px; background: #e7e8ef; margin: 0 3px; }
 .canvas-footnote { position: absolute; left: 23px; bottom: 8px; color: #a8afbc; font-size: 8px; pointer-events: none; }
 .svelte-flow__minimap { width: 130px; height: 90px; border: 1px solid #e2e5ec; border-radius: 7px; overflow: hidden; box-shadow: none; background: #fbfbfd; margin: 24px; }

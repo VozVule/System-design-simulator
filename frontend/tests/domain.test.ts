@@ -22,8 +22,8 @@ describe('saved document contract', () => {
     graph.edges[0].order = 9; graph.edges[0].weight = 0; graph.edges[1].order = 2; graph.edges[1].weight = 1.5;
     const before = clone(graph);
     expect(destinations(graph, 'lb').map((e) => e.id)).toEqual(['eb', 'ea']);
-    expect(canvasNodes(graph, 'lb')[1]).toMatchObject({ position: graph.nodes[1].position, selected: true });
-    expect(canvasEdges(graph, null).map((e) => e.id)).toEqual(['ea', 'eb']);
+    expect(canvasNodes(graph, ['lb'])[1]).toMatchObject({ position: graph.nodes[1].position, selected: true });
+    expect(canvasEdges(graph, []).map((e) => e.id)).toEqual(['ea', 'eb']);
     expect(validateWrite(write(graph)).document).toEqual(before);
     expect(graph).toEqual(before);
   });

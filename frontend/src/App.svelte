@@ -16,7 +16,7 @@
 
   let { store = new HttpArchitectureStore() }: { store?: ArchitectureStore } = $props();
   let editor = $state.raw(newEditor());
-  let selected = $state<string | null>(null), canvas: Canvas;
+  let selected = $state<string[]>([]), selectMode = $state(false), canvas: Canvas;
   let libraryOpen = $state(false), library = $state<ArchitectureSummary[]>([]), loading = $state(false), libraryError = $state('');
   let error = $state(''), saveFailed = $state(false), saving = $state(false), navigationSaving = $state(false), opening = $state(false), deleting = $state(false), awaitingAction = $state(false);
   let pendingSave: Promise<boolean> | null = null;
@@ -34,8 +34,8 @@
   const dirty = $derived(isDirty(editor));
   const locked = $derived(navigationSaving || opening || deleting);
   const document = $derived(editor.write.document);
-  const node = $derived(document.nodes.find((item) => item.id === selected));
-  const edge = $derived(document.edges.find((item) => item.id === selected));
+  const node = $derived(document.nodes.find((item) => selected.length === 1 && item.id === selected[0]));
+  const edge = $derived(document.edges.find((item) => selected.length === 1 && item.id === selected[0]));
   const router = $derived(node?.type === 'load_balancer' || node?.type === 'gateway');
   const outgoing = $derived(node ? destinations(document, node.id) : []);
   const status = $derived(saving ? 'Saving…' : saveFailed ? 'Save failed' : dirty ? 'Unsaved changes' : editor.id ? 'Saved' : 'New architecture');
@@ -54,7 +54,7 @@
     if (!locked) { editor = { ...editor, write: { ...editor.write, document: next } }; error = ''; saveFailed = false; }
   }
   function field(key: string, text: string): void { if (!locked) { editor = editField(editor, key, text); error = ''; saveFailed = false; } }
-  function select(id: string | null): void { selected = id; }
+  function select(ids: string[]): void { if (!equal([...selected].sort(), [...ids].sort())) selected = ids; }
   function clipboardAvailable(event: ClipboardEvent): boolean {
     const target = event.target;
     return !locked && !libraryOpen && !navigation && !deleteTarget && !(target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
@@ -76,7 +76,7 @@
       event.preventDefault();
       if (clipboardText !== text) { clipboardText = text; pasteCount = 0; }
       const component = duplicateComponent(document, copied, canvas.pastePosition(copied.position, ++pasteCount));
-      changeDocument({ ...clone(document), nodes: [...document.nodes, component] }); selected = component.id;
+      changeDocument({ ...clone(document), nodes: [...document.nodes, component] }); selected = [component.id];
       void canvas.focusComponent(component.id);
       clipboardNotice = `Pasted ${component.label}.`;
     } catch (cause) { event.preventDefault(); error = message(cause); }
@@ -88,7 +88,7 @@
     const component = newComponent(type, at ? point : { x: point.x + existing * 26, y: point.y + existing * 30 });
     const count = document.nodes.filter((n) => n.type === type).length;
     if (count) component.label += ' ' + (count + 1);
-    changeDocument({ ...clone(document), nodes: [...document.nodes, component] }); selected = component.id;
+    changeDocument({ ...clone(document), nodes: [...document.nodes, component] }); selected = [component.id];
   }
   function positions(items: { id: string; x: number; y: number }[]): void {
     if (locked) return;
@@ -112,7 +112,7 @@
     if (locked) return;
     const next = removeElements(document, nodes, edges);
     const removed = [...nodes, ...document.edges.filter((e) => !next.edges.some((n) => n.id === e.id)).map((e) => e.id)];
-    changeDocument(next); editor = clearElementDrafts(editor, removed); if (selected && removed.includes(selected)) selected = null;
+    changeDocument(next); editor = clearElementDrafts(editor, removed); selected = selected.filter((id) => !removed.includes(id));
   }
   async function refreshLibrary(): Promise<void> {
     loading = true; libraryError = '';
@@ -150,10 +150,10 @@
     } finally { awaitingAction = false; }
   }
   async function navigate(action: Navigation): Promise<void> {
-    if (action.type === 'new') { editor = newEditor(); selected = null; error = ''; saveFailed = false; libraryOpen = false; }
+    if (action.type === 'new') { editor = newEditor(); selected = []; error = ''; saveFailed = false; libraryOpen = false; }
     else {
       opening = true;
-      try { const resource = await store.get(action.id); editor = openEditor(resource); selected = null; error = ''; saveFailed = false; libraryOpen = false; await tick(); await canvas.fit(); }
+      try { const resource = await store.get(action.id); editor = openEditor(resource); selected = []; error = ''; saveFailed = false; libraryOpen = false; await tick(); await canvas.fit(); }
       catch (cause) { error = message(cause); await refreshLibrary(); }
       finally { opening = false; }
     }
@@ -178,7 +178,7 @@
     deleting = true; error = '';
     try {
       await store.delete(item.id);
-      if (editor.id === item.id) { editor = newEditor(); selected = null; saveFailed = false; }
+      if (editor.id === item.id) { editor = newEditor(); selected = []; saveFailed = false; }
       deleteTarget = null; await refreshLibrary();
     } catch (cause) { error = message(cause); }
     finally { deleting = false; }
@@ -186,6 +186,10 @@
   function keydown(event: KeyboardEvent): void {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
       event.preventDefault(); if (!locked && !navigation && !deleteTarget && !saveDisabled) void save();
+    }
+    if (event.key.toLowerCase() === 'v' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.repeat && !locked && !libraryOpen && !navigation && !deleteTarget
+      && !(event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'))) {
+      event.preventDefault(); selectMode = !selectMode;
     }
     if (event.key === 'Escape' && !navigation && !deleteTarget) libraryOpen = false;
   }
@@ -219,14 +223,14 @@
 
     <div class="canvas-column">
       {#if error}<div class="error-banner" role="alert"><span>{error}</span>{#if saveFailed}<button onclick={save} disabled={saveDisabled}>Retry Save</button>{/if}<button aria-label="Dismiss error" onclick={() => error = ''}><X size={16} /></button></div>{/if}
-      {#if Object.keys(editor.errors).length}<div class="validation-banner" role="alert">{#each Object.entries(editor.errors) as [key, issue]}<button onclick={() => { if (key !== 'name') selected = key.split(':')[1]; }}>{key === 'name' ? 'Architecture name' : document.nodes.find((n) => n.id === key.split(':')[1])?.label ?? 'Connection'}: {issue}</button>{/each}</div>{/if}
-      <SvelteFlowProvider><Canvas bind:this={canvas} {document} {selected} {locked} onselect={select} onpositions={positions} onconnect={connection} onremove={remove} onadd={add} /></SvelteFlowProvider>
+      {#if Object.keys(editor.errors).length}<div class="validation-banner" role="alert">{#each Object.entries(editor.errors) as [key, issue]}<button onclick={() => { if (key !== 'name') selected = [key.split(':')[1]]; }}>{key === 'name' ? 'Architecture name' : document.nodes.find((n) => n.id === key.split(':')[1])?.label ?? 'Connection'}: {issue}</button>{/each}</div>{/if}
+      <SvelteFlowProvider><Canvas bind:this={canvas} {document} {selected} {selectMode} {locked} onmodechange={(value) => selectMode = value} onselect={select} onpositions={positions} onconnect={connection} onremove={remove} onadd={add} /></SvelteFlowProvider>
     </div>
 
     <PanelDivider label="Resize configuration inspector" controls="configuration-inspector" side="right" value={shownInspector} min={200} max={inspectorMax} onchange={(value) => inspectorWidth = value} />
 
     <aside id="configuration-inspector" class="inspector" aria-label="Configuration inspector">
-      <div class="inspector-heading"><span><SlidersHorizontal size={17} />Inspector</span>{#if selected}<button class="icon-button" aria-label="Clear selection" onclick={() => selected = null}><X size={16} /></button>{/if}</div>
+      <div class="inspector-heading"><span><SlidersHorizontal size={17} />Inspector</span>{#if selected.length}<button class="icon-button" aria-label="Clear selection" onclick={() => selected = []}><X size={16} /></button>{/if}</div>
       <fieldset disabled={locked}>
       {#if node}
         <div class="inspector-content"><div class="selected-kind"><ComponentIcon type={node.type} /><span>{typeName(node.type)}</span></div><h2>{node.label}</h2><p class="inspector-intro">Configure this component.</p>
@@ -239,7 +243,7 @@
           {#if node.type === 'load_balancer' || node.type === 'gateway'}<div class="form-field"><label for="routing">Routing policy</label><select id="routing" value={node.routing_policy} onchange={(e) => { const next = clone(document), n = next.nodes.find((n) => n.id === node.id); if (n && (n.type === 'load_balancer' || n.type === 'gateway')) { n.routing_policy = e.currentTarget.value === 'weighted' ? 'weighted' : 'round_robin'; changeDocument(next); } }}><option value="round_robin">Round-robin</option><option value="weighted">Weighted split</option></select></div>{/if}
           <div class="section-label">CANVAS POSITION</div><div class="coordinate-fields">{#each ['x', 'y'] as axis}<Field label={axis.toUpperCase() + ' position'} compact numeric value={fieldValue(editor, `node:${node.id}:${axis}`, axis === 'x' ? node.position.x : node.position.y)} error={editor.errors[`node:${node.id}:${axis}`]} oninput={(text) => field(`node:${node.id}:${axis}`, text)} />{/each}</div>
           <div class="section-label">{router ? 'DESTINATIONS' : 'CONNECTIONS'}<span>{outgoing.length}</span></div>
-          {#if outgoing.length}{#each outgoing as destination, index}<div class="destination-row"><div class="destination-name"><button onclick={() => selected = destination.id}><ArrowUpRight size={14} />{document.nodes.find((n) => n.id === destination.target)?.label}</button>{#if router}<div class="order-buttons"><button aria-label={'Move up destination ' + (index + 1)} disabled={index === 0} onclick={() => changeDocument(reorder(document, destination.id, -1))}><ChevronUp size={13} /></button><button aria-label={'Move down destination ' + (index + 1)} disabled={index === outgoing.length - 1} onclick={() => changeDocument(reorder(document, destination.id, 1))}><ChevronDown size={13} /></button></div>{/if}</div>{#if (node.type === 'load_balancer' || node.type === 'gateway') && node.routing_policy === 'weighted'}<div class="weight-row"><Field label={'Weight for ' + (document.nodes.find((n) => n.id === destination.target)?.label ?? 'destination')} compact numeric value={fieldValue(editor, `edge:${destination.id}:weight`, destination.weight)} error={editor.errors[`edge:${destination.id}:weight`]} oninput={(text) => field(`edge:${destination.id}:weight`, text)} /><span>{weightPercent(document, destination)?.toFixed(1) ?? '—'}%</span></div>{/if}</div>{/each}{:else}<p class="muted">No outgoing connections yet.</p>{/if}
+          {#if outgoing.length}{#each outgoing as destination, index}<div class="destination-row"><div class="destination-name"><button onclick={() => selected = [destination.id]}><ArrowUpRight size={14} />{document.nodes.find((n) => n.id === destination.target)?.label}</button>{#if router}<div class="order-buttons"><button aria-label={'Move up destination ' + (index + 1)} disabled={index === 0} onclick={() => changeDocument(reorder(document, destination.id, -1))}><ChevronUp size={13} /></button><button aria-label={'Move down destination ' + (index + 1)} disabled={index === outgoing.length - 1} onclick={() => changeDocument(reorder(document, destination.id, 1))}><ChevronDown size={13} /></button></div>{/if}</div>{#if (node.type === 'load_balancer' || node.type === 'gateway') && node.routing_policy === 'weighted'}<div class="weight-row"><Field label={'Weight for ' + (document.nodes.find((n) => n.id === destination.target)?.label ?? 'destination')} compact numeric value={fieldValue(editor, `edge:${destination.id}:weight`, destination.weight)} error={editor.errors[`edge:${destination.id}:weight`]} oninput={(text) => field(`edge:${destination.id}:weight`, text)} /><span>{weightPercent(document, destination)?.toFixed(1) ?? '—'}%</span></div>{/if}</div>{/each}{:else}<p class="muted">No outgoing connections yet.</p>{/if}
           {#if router && node && 'routing_policy' in node && node.routing_policy === 'weighted' && outgoing.length && outgoing.every((e) => e.weight === 0)}<p class="incomplete-hint">All weights are zero. You can save this draft and finish routing later.</p>{/if}
           {#if node.type !== 'database'}<div class="connection-controls"><label for="connect-target">Connect to</label><select id="connect-target" bind:value={connectionTarget}><option value="">Choose a component…</option>{#each document.nodes as target}<option value={target.id}>{target.label}</option>{/each}</select><button class="secondary" disabled={!connectionTarget} onclick={() => { if (node) connection(node.id, connectionTarget); }}>Connect<ArrowRight size={14} /></button></div>{/if}
           <p class="copy-hint">Select on the canvas, then Ctrl/Cmd+C to copy and Ctrl/Cmd+V to paste.</p>
@@ -254,6 +258,8 @@
           <div class="connection-meta"><span>Destination order</span><strong>{edge.order}</strong></div><p class="field-hint">Adjust destination order from the source component’s inspector.</p>
           <button class="danger-text" onclick={() => { if (edge) remove([], [edge.id]); }}><Trash2 size={14} />Remove connection</button>
         </div>
+      {:else if selected.length > 1}
+        <div class="inspector-content"><h2>{selected.length} items selected</h2><p class="inspector-intro">Drag the selection to move it. Press Delete to remove it.</p><button class="danger-text" onclick={() => remove(document.nodes.filter((n) => selected.includes(n.id)).map((n) => n.id), document.edges.filter((e) => selected.includes(e.id)).map((e) => e.id))}><Trash2 size={14} />Remove selected items</button></div>
       {:else}
         <div class="inspector-empty"><div class="inspector-illustration"><SlidersHorizontal size={28} strokeWidth={1.4} /></div><h3>A closer look.</h3><p>Select a component or connection<br />to edit its properties.</p></div>
         <div class="inspector-tip"><span class="eyebrow">GOOD TO KNOW</span><p>Keep your graph acyclic.<br />Each arrow defines a direction<br />for traffic to follow.</p></div>
