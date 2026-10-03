@@ -127,27 +127,42 @@ def test_wrongly_typed_version_has_regular_validation_error(client: TestClient, 
 
 
 def test_unknown_fields_are_rejected_at_nested_levels(client: TestClient) -> None:
-    for location in ("root", "document", "node", "position", "edge"):
+    for location, field, expected_path in (
+        ("root", "id", "/id"), ("document", "results", "/document/results"),
+        ("node", "routing_policy", "/document/nodes/0/routing_policy"),
+        ("position", "extra", "/document/nodes/0/position/extra"), ("edge", "extra", "/document/edges/0/extra"),
+        ("root", "caller_group", "/caller_group"), ("document", "server", "/document/server"),
+        ("node", "gateway", "/document/nodes/0/gateway"),
+        ("position", "load_balancer", "/document/nodes/0/position/load_balancer"),
+        ("edge", "database", "/document/edges/0/database"),
+    ):
         payload = full_payload()
         document = as_object(payload["document"])
         nodes = [as_object(node) for node in as_array(document["nodes"])]
         edges = [as_object(edge) for edge in as_array(document["edges"])]
         if location == "root":
-            payload["id"] = str(uuid4())
+            payload[field] = str(uuid4())
         elif location == "document":
-            document["results"] = []
+            document[field] = []
         elif location == "node":
-            nodes[0]["routing_policy"] = "weighted"
+            nodes[0][field] = "weighted"
         elif location == "position":
             position = as_object(nodes[0]["position"])
-            position["extra"] = 1
+            position[field] = 1
             nodes[0]["position"] = position
         else:
-            edges[0]["extra"] = 1
+            edges[0][field] = 1
         document.update(nodes=nodes, edges=edges)
         payload["document"] = document
         error = assert_error(client.post("/api/v1/architectures", json=payload), 422, "validation_error")
-        assert any(detail.code == "unknown_field" for detail in error.error.details)
+        assert any(detail.code == "unknown_field" and detail.path == expected_path for detail in error.error.details)
+    assert client.get("/api/v1/architectures").json() == {"items": []}
+
+
+@pytest.mark.parametrize("name", [" ", "\t\n", "\u001c", "\u001d"])
+def test_blank_normalized_names_are_field_validation_errors(client: TestClient, name: str) -> None:
+    error = assert_error(client.post("/api/v1/architectures", json=empty_payload(name)), 422, "validation_error")
+    assert any(detail.path == "/name" for detail in error.error.details)
     assert client.get("/api/v1/architectures").json() == {"items": []}
 
 

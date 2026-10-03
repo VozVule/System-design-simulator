@@ -95,7 +95,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if issue.type == "json_invalid":
                 return error_response(400, "invalid_json", "The request body must contain valid JSON.")
             location: Literal["body", "path"] = "path" if issue.loc and issue.loc[0] == "path" else "body"
-            parts = [str(part).replace("~", "~0").replace("/", "~1") for part in issue.loc[1:] if part not in COMPONENT_TAGS]
+            segments = issue.loc[1:]
+            # A discriminated node union adds its tag after the node array index.
+            if len(segments) >= 4 and segments[:2] == ["document", "nodes"] and isinstance(segments[2], int) and segments[3] in COMPONENT_TAGS:
+                segments = segments[:3] + segments[4:]
+            parts = [str(part).replace("~", "~0").replace("/", "~1") for part in segments]
             details.append(ErrorDetail(location=location, path="" if not parts else "/" + "/".join(parts), code=detail_code(issue.type), message=issue.msg))
         code: ErrorCode = "unsupported_document_version" if any(detail.code == "unsupported_document_version" for detail in details) else "validation_error"
         return error_response(422, code, "The request contains invalid fields.", details)

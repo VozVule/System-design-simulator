@@ -67,7 +67,7 @@ def test_long_acyclic_graph_does_not_require_recursive_validation() -> None:
     (0, "caller_count", True), (0, "caller_count", 0), (0, "test_rps", -1),
     (0, "capacity_rps", 10), (1, "capacity_rps", "100"), (1, "capacity_rps", 100.0),
     (1, "capacity_rps", 0), (1, "capacity_rps", 9_007_199_254_740_992),
-    (1, "routing_policy", "random"), (1, "label", "  "), (1, "caller_count", 1),
+    (1, "routing_policy", "random"), (1, "label", "  "), (1, "label", "\u001c"), (1, "caller_count", 1),
 ])
 def test_component_configuration_is_strict(index: int, field: str, invalid: object) -> None:
     payload = full_payload()

@@ -7,17 +7,25 @@ from pydantic_core import PydanticCustomError
 
 
 MAX_INTEGER = 9_007_199_254_740_991
+
+
+def require_nonblank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("Value must not be blank.")
+    return value
+
+
 PositiveInteger = Annotated[int, Field(strict=True, ge=1, le=MAX_INTEGER, json_schema_extra={"x-strict-integer": True})]
 NonnegativeInteger = Annotated[int, Field(strict=True, ge=0, le=MAX_INTEGER, json_schema_extra={"x-strict-integer": True})]
 ElementId = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")]
-NonblankString = Annotated[str, Field(min_length=1, max_length=120, pattern=r"\S")]
+NonblankString = Annotated[str, Field(min_length=1, max_length=120, pattern=r"\S"), AfterValidator(require_nonblank)]
 FiniteNumber = Annotated[float, Field(strict=True, allow_inf_nan=False, json_schema_extra={"x-finite": True})]
 RelativeWeight = Annotated[FiniteNumber, Field(ge=0)]
 RoutingPolicy: TypeAlias = Literal["round_robin", "weighted"]
 
 
 def normalize_name(value: str) -> str:
-    return value.strip()
+    return require_nonblank(value.strip())
 
 
 def require_version(value: object) -> Literal[1]:

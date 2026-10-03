@@ -41,6 +41,7 @@ class SQLiteArchitectureStore:
     def connection(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
         try:
             with closing(sqlite3.connect(self.database_path, timeout=self.timeout, isolation_level=None)) as connection:
+                connection.row_factory = sqlite3.Row
                 if write:
                     connection.execute("BEGIN IMMEDIATE")
                 try:
@@ -73,9 +74,10 @@ class SQLiteArchitectureStore:
                 )
             """)
 
-    def decode(self, row: tuple[object, ...]) -> Architecture:
+    def decode(self, row: sqlite3.Row) -> Architecture:
         try:
-            record = StoredRow.model_validate(dict(zip(StoredRow.model_fields, row, strict=True)))
+            fields: dict[str, object] = {key: row[key] for key in row.keys()}
+            record = StoredRow.model_validate(fields)
             document = ArchitectureDocument.model_validate_json(record.document_json)
             if record.format_version != document.format_version or validate_graph(document):
                 raise ValueError("Stored document is invalid.")
@@ -91,7 +93,7 @@ class SQLiteArchitectureStore:
             raise InvalidStoredArchitecture("The saved architecture is invalid.") from error
 
     def read(self, connection: sqlite3.Connection, architecture_id: UUID) -> Architecture:
-        row: tuple[object, ...] | None = connection.execute(
+        row: sqlite3.Row | None = connection.execute(
             "SELECT id, name, format_version, created_at, updated_at, document_json FROM architectures WHERE id = ?",
             (str(architecture_id),),
         ).fetchone()
@@ -112,7 +114,7 @@ class SQLiteArchitectureStore:
 
     def list(self) -> list[ArchitectureSummary]:
         with self.connection() as connection:
-            rows: list[tuple[object, ...]] = connection.execute(
+            rows: list[sqlite3.Row] = connection.execute(
                 "SELECT id, name, format_version, created_at, updated_at, document_json FROM architectures ORDER BY updated_at DESC, id ASC"
             ).fetchall()
             results: list[ArchitectureSummary] = []
