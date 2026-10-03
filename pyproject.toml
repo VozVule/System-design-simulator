@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sysd-simulator-backend"
+version = "0.1.0"
+description = "Local architecture library API for the System Design Simulator"
+requires-python = ">=3.12,<3.13"
+dependencies = ["fastapi==0.142.2", "pydantic==2.13.5", "uvicorn==0.54.0"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.1.1", "httpx==0.28.1", "mypy==2.4.0",
+  "jsonschema==4.26.0", "types-jsonschema==4.26.0.20260518",
+  "openapi-spec-validator==0.9.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["backend"]
+addopts = "-ra"
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "backend"
+files = ["backend", "tests", "scripts"]
+strict = true
+disallow_any_explicit = true
+disallow_any_unimported = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_typed = true
+init_forbid_extra = true
+warn_required_dynamic_aliases = true
