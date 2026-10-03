@@ -1,0 +1,1338 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "System Design Simulator — Architecture Library API",
+    "version": "1.0.0-draft",
+    "description": "Release 1 milestone 1 design contract. Architecture CRUD and explicit Save only; simulation is deferred. POST is first Save and PUT replaces an existing saved document. The frontend owns unsaved edits. x-strict-integer and x-finite describe required runtime checks beyond standard JSON Schema."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8000",
+      "description": "Example local development address; configurable during implementation."
+    }
+  ],
+  "tags": [
+    {
+      "name": "Architectures",
+      "description": "Local SQLite architecture library and explicit Save."
+    }
+  ],
+  "paths": {
+    "/api/v1/architectures": {
+      "post": {
+        "tags": [
+          "Architectures"
+        ],
+        "operationId": "createArchitecture",
+        "summary": "Create and save an architecture",
+        "description": "First Save creates a new persisted architecture. Accepts incomplete diagrams. Every successful POST creates a new ID; retries are not idempotent.",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ArchitectureWrite"
+        },
+        "responses": {
+          "201": {
+            "description": "Architecture durably created. Creation and update timestamps are equal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Architecture"
+                },
+                "example": {
+                  "id": "0ccdc365-31f4-46c8-9f94-2b36d7f73b08",
+                  "name": "Application with database",
+                  "created_at": "2026-10-03T15:00:00.000000Z",
+                  "updated_at": "2026-10-03T15:00:00.000000Z",
+                  "document": {
+                    "format_version": 1,
+                    "nodes": [
+                      {
+                        "id": "callers",
+                        "type": "caller_group",
+                        "label": "Callers",
+                        "position": {
+                          "x": -80,
+                          "y": 120.5
+                        },
+                        "capacity_rps": null,
+                        "caller_count": 100,
+                        "test_rps": 100
+                      },
+                      {
+                        "id": "lb",
+                        "type": "load_balancer",
+                        "label": "Load balancer",
+                        "position": {
+                          "x": 160,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 100,
+                        "routing_policy": "weighted"
+                      },
+                      {
+                        "id": "gateway",
+                        "type": "gateway",
+                        "label": "Gateway",
+                        "position": {
+                          "x": 400,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 100,
+                        "routing_policy": "round_robin"
+                      },
+                      {
+                        "id": "server",
+                        "type": "server",
+                        "label": "Server",
+                        "position": {
+                          "x": 640,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 60
+                      },
+                      {
+                        "id": "database",
+                        "type": "database",
+                        "label": "Database",
+                        "position": {
+                          "x": 880,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 60
+                      }
+                    ],
+                    "edges": [
+                      {
+                        "id": "callers-lb",
+                        "source": "callers",
+                        "target": "lb",
+                        "order": 0,
+                        "weight": 1
+                      },
+                      {
+                        "id": "lb-gateway",
+                        "source": "lb",
+                        "target": "gateway",
+                        "order": 0,
+                        "weight": 1.5
+                      },
+                      {
+                        "id": "gateway-server",
+                        "source": "gateway",
+                        "target": "server",
+                        "order": 0,
+                        "weight": 0
+                      },
+                      {
+                        "id": "server-database",
+                        "source": "server",
+                        "target": "database",
+                        "order": 0,
+                        "weight": 1
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "required": true,
+                "description": "Relative route for the newly saved architecture.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                },
+                "example": "/api/v1/architectures/0ccdc365-31f4-46c8-9f94-2b36d7f73b08"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJson"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/StorageUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Architectures"
+        ],
+        "operationId": "listArchitectures",
+        "summary": "List saved architectures",
+        "description": "Metadata only. All entries, ordered by updated_at descending then ID ascending. No pagination. An empty library returns items: [].",
+        "responses": {
+          "200": {
+            "description": "Saved architecture metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchitectureList"
+                },
+                "examples": {
+                  "library": {
+                    "value": {
+                      "items": [
+                        {
+                          "id": "0ccdc365-31f4-46c8-9f94-2b36d7f73b08",
+                          "name": "Application with database",
+                          "created_at": "2026-10-03T15:00:00.000000Z",
+                          "updated_at": "2026-10-03T15:00:00.000000Z",
+                          "format_version": 1
+                        }
+                      ]
+                    }
+                  },
+                  "empty": {
+                    "value": {
+                      "items": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/StorageUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/architectures/{architecture_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ArchitectureId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Architectures"
+        ],
+        "operationId": "getArchitecture",
+        "summary": "Open a saved architecture",
+        "description": "Return the latest saved document. Unknown well-formed UUIDs return 404; invalid UUID strings return 422.",
+        "responses": {
+          "200": {
+            "description": "Complete latest saved architecture.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Architecture"
+                },
+                "example": {
+                  "id": "0ccdc365-31f4-46c8-9f94-2b36d7f73b08",
+                  "name": "Application with database",
+                  "created_at": "2026-10-03T15:00:00.000000Z",
+                  "updated_at": "2026-10-03T15:00:00.000000Z",
+                  "document": {
+                    "format_version": 1,
+                    "nodes": [
+                      {
+                        "id": "callers",
+                        "type": "caller_group",
+                        "label": "Callers",
+                        "position": {
+                          "x": -80,
+                          "y": 120.5
+                        },
+                        "capacity_rps": null,
+                        "caller_count": 100,
+                        "test_rps": 100
+                      },
+                      {
+                        "id": "lb",
+                        "type": "load_balancer",
+                        "label": "Load balancer",
+                        "position": {
+                          "x": 160,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 100,
+                        "routing_policy": "weighted"
+                      },
+                      {
+                        "id": "gateway",
+                        "type": "gateway",
+                        "label": "Gateway",
+                        "position": {
+                          "x": 400,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 100,
+                        "routing_policy": "round_robin"
+                      },
+                      {
+                        "id": "server",
+                        "type": "server",
+                        "label": "Server",
+                        "position": {
+                          "x": 640,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 60
+                      },
+                      {
+                        "id": "database",
+                        "type": "database",
+                        "label": "Database",
+                        "position": {
+                          "x": 880,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 60
+                      }
+                    ],
+                    "edges": [
+                      {
+                        "id": "callers-lb",
+                        "source": "callers",
+                        "target": "lb",
+                        "order": 0,
+                        "weight": 1
+                      },
+                      {
+                        "id": "lb-gateway",
+                        "source": "lb",
+                        "target": "gateway",
+                        "order": 0,
+                        "weight": 1.5
+                      },
+                      {
+                        "id": "gateway-server",
+                        "source": "gateway",
+                        "target": "server",
+                        "order": 0,
+                        "weight": 0
+                      },
+                      {
+                        "id": "server-database",
+                        "source": "server",
+                        "target": "database",
+                        "order": 0,
+                        "weight": 1
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ArchitectureNotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/StorageUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Architectures"
+        ],
+        "operationId": "replaceArchitecture",
+        "summary": "Save a complete replacement architecture",
+        "description": "Atomically replace name and entire document; no merging or upsert. Remove omitted elements and retain ID/created_at. Advance updated_at only when validated content changes. An identical PUT preserves timestamps. Incident edges must be removed with a deleted node. Unknown UUIDs return 404.",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ArchitectureWrite"
+        },
+        "responses": {
+          "200": {
+            "description": "Complete authoritative saved representation after commit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Architecture"
+                },
+                "example": {
+                  "id": "0ccdc365-31f4-46c8-9f94-2b36d7f73b08",
+                  "name": "Renamed application",
+                  "created_at": "2026-10-03T15:00:00.000000Z",
+                  "updated_at": "2026-10-03T15:01:00.000000Z",
+                  "document": {
+                    "format_version": 1,
+                    "nodes": [
+                      {
+                        "id": "callers",
+                        "type": "caller_group",
+                        "label": "Callers",
+                        "position": {
+                          "x": -80,
+                          "y": 120.5
+                        },
+                        "capacity_rps": null,
+                        "caller_count": 100,
+                        "test_rps": 100
+                      },
+                      {
+                        "id": "lb",
+                        "type": "load_balancer",
+                        "label": "Load balancer",
+                        "position": {
+                          "x": 160,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 100,
+                        "routing_policy": "weighted"
+                      },
+                      {
+                        "id": "gateway",
+                        "type": "gateway",
+                        "label": "Gateway",
+                        "position": {
+                          "x": 400,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 100,
+                        "routing_policy": "round_robin"
+                      },
+                      {
+                        "id": "server",
+                        "type": "server",
+                        "label": "Server",
+                        "position": {
+                          "x": 640,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 60
+                      },
+                      {
+                        "id": "database",
+                        "type": "database",
+                        "label": "Database",
+                        "position": {
+                          "x": 880,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 60
+                      }
+                    ],
+                    "edges": [
+                      {
+                        "id": "callers-lb",
+                        "source": "callers",
+                        "target": "lb",
+                        "order": 0,
+                        "weight": 1
+                      },
+                      {
+                        "id": "lb-gateway",
+                        "source": "lb",
+                        "target": "gateway",
+                        "order": 0,
+                        "weight": 1.5
+                      },
+                      {
+                        "id": "gateway-server",
+                        "source": "gateway",
+                        "target": "server",
+                        "order": 0,
+                        "weight": 0
+                      },
+                      {
+                        "id": "server-database",
+                        "source": "server",
+                        "target": "database",
+                        "order": 0,
+                        "weight": 1
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJson"
+          },
+          "404": {
+            "$ref": "#/components/responses/ArchitectureNotFound"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/StorageUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Architectures"
+        ],
+        "operationId": "deleteArchitecture",
+        "summary": "Delete a saved architecture",
+        "description": "Atomically delete the architecture. Success has no body. Subsequent reads, writes, and deletes return 404.",
+        "responses": {
+          "204": {
+            "description": "Architecture deleted. No response body."
+          },
+          "404": {
+            "$ref": "#/components/responses/ArchitectureNotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/StorageUnavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PositiveInteger": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991,
+        "description": "JSON integer only. Reject booleans, strings, and floating-point values, including 1.0, at runtime. Values must be exactly representable by the frontend.",
+        "x-strict-integer": true
+      },
+      "NonnegativeInteger": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991,
+        "description": "JSON integer only. Reject booleans, strings, and floating-point values, including 1.0, at runtime. Values must be exactly representable by the frontend.",
+        "x-strict-integer": true
+      },
+      "DocumentFormatVersion": {
+        "type": "integer",
+        "const": 1,
+        "x-strict-integer": true,
+        "description": "Only format version 1 is supported. Not a saved revision counter."
+      },
+      "ElementId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
+        "description": "Frontend-generated ID, unique across all nodes and edges in a document."
+      },
+      "ArchitectureId": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Backend-generated UUID v4 for a saved architecture. UUID paths are explicitly decoded."
+      },
+      "ArchitectureName": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120,
+        "pattern": "\\S",
+        "description": "Input length is 1–120 characters. Trim outer whitespace before storing; reject a blank result."
+      },
+      "ComponentLabel": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120,
+        "pattern": "\\S",
+        "description": "Nonblank label, preserved as submitted."
+      },
+      "UtcTimestamp": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "Z$",
+        "description": "Read-only UTC RFC 3339 timestamp ending in Z."
+      },
+      "FiniteNumber": {
+        "type": "number",
+        "x-finite": true,
+        "description": "Finite JSON number. Integers and fractions allowed; strings and booleans rejected."
+      },
+      "RelativeWeight": {
+        "type": "number",
+        "minimum": 0,
+        "x-finite": true,
+        "description": "Finite nonnegative relative weight, including fractional values and zero. Need not sum to 100."
+      },
+      "RoutingPolicy": {
+        "type": "string",
+        "enum": [
+          "round_robin",
+          "weighted"
+        ]
+      },
+      "Position": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          },
+          "y": {
+            "$ref": "#/components/schemas/FiniteNumber"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ]
+      },
+      "CallerGroup": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ElementId"
+          },
+          "type": {
+            "type": "string",
+            "const": "caller_group"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ComponentLabel"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "capacity_rps": {
+            "type": "null",
+            "description": "Unused source capacity. Always null."
+          },
+          "caller_count": {
+            "$ref": "#/components/schemas/PositiveInteger"
+          },
+          "test_rps": {
+            "$ref": "#/components/schemas/NonnegativeInteger"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "label",
+          "position",
+          "capacity_rps",
+          "caller_count",
+          "test_rps"
+        ]
+      },
+      "LoadBalancer": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ElementId"
+          },
+          "type": {
+            "type": "string",
+            "const": "load_balancer"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ComponentLabel"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "capacity_rps": {
+            "$ref": "#/components/schemas/PositiveInteger"
+          },
+          "routing_policy": {
+            "$ref": "#/components/schemas/RoutingPolicy"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "label",
+          "position",
+          "capacity_rps",
+          "routing_policy"
+        ]
+      },
+      "Gateway": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ElementId"
+          },
+          "type": {
+            "type": "string",
+            "const": "gateway"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ComponentLabel"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "capacity_rps": {
+            "$ref": "#/components/schemas/PositiveInteger"
+          },
+          "routing_policy": {
+            "$ref": "#/components/schemas/RoutingPolicy"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "label",
+          "position",
+          "capacity_rps",
+          "routing_policy"
+        ]
+      },
+      "Server": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ElementId"
+          },
+          "type": {
+            "type": "string",
+            "const": "server"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ComponentLabel"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "capacity_rps": {
+            "$ref": "#/components/schemas/PositiveInteger"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "label",
+          "position",
+          "capacity_rps"
+        ]
+      },
+      "Database": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ElementId"
+          },
+          "type": {
+            "type": "string",
+            "const": "database"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ComponentLabel"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "capacity_rps": {
+            "$ref": "#/components/schemas/PositiveInteger"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "label",
+          "position",
+          "capacity_rps"
+        ]
+      },
+      "Component": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/CallerGroup"
+          },
+          {
+            "$ref": "#/components/schemas/LoadBalancer"
+          },
+          {
+            "$ref": "#/components/schemas/Gateway"
+          },
+          {
+            "$ref": "#/components/schemas/Server"
+          },
+          {
+            "$ref": "#/components/schemas/Database"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "caller_group": "#/components/schemas/CallerGroup",
+            "load_balancer": "#/components/schemas/LoadBalancer",
+            "gateway": "#/components/schemas/Gateway",
+            "server": "#/components/schemas/Server",
+            "database": "#/components/schemas/Database"
+          }
+        }
+      },
+      "Connection": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ElementId"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ElementId"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ElementId"
+          },
+          "order": {
+            "$ref": "#/components/schemas/NonnegativeInteger",
+            "description": "Unique per source; ascending values define destination order. Gaps are allowed."
+          },
+          "weight": {
+            "$ref": "#/components/schemas/RelativeWeight"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "target",
+          "order",
+          "weight"
+        ]
+      },
+      "ArchitectureDocument": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "format_version": {
+            "$ref": "#/components/schemas/DocumentFormatVersion"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Component"
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Connection"
+            }
+          }
+        },
+        "required": [
+          "format_version",
+          "nodes",
+          "edges"
+        ],
+        "description": "A saveable typed graph document. Empty/disconnected diagrams are allowed; simulation readiness is deferred.",
+        "x-domain-rules": [
+          "IDs are unique across nodes and edges.",
+          "Connection endpoints must exist. Duplicate source/target pairs are forbidden.",
+          "Destination order must be unique per source. Array order is also preserved.",
+          "No self-connections or directed cycles.",
+          "Caller Groups have no incoming edges and at most one outgoing edge while editing.",
+          "Servers have at most one outgoing edge. Databases have none.",
+          "Save allows missing minimum destinations and all-zero weighted routes."
+        ]
+      },
+      "ArchitectureWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/ArchitectureName"
+          },
+          "document": {
+            "$ref": "#/components/schemas/ArchitectureDocument"
+          }
+        },
+        "required": [
+          "name",
+          "document"
+        ],
+        "description": "Complete desired saved name and document. No metadata, partial updates, results, or runtime state."
+      },
+      "Architecture": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ArchitectureId",
+            "readOnly": true
+          },
+          "name": {
+            "$ref": "#/components/schemas/ArchitectureName"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/UtcTimestamp",
+            "readOnly": true
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/UtcTimestamp",
+            "readOnly": true
+          },
+          "document": {
+            "$ref": "#/components/schemas/ArchitectureDocument"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "updated_at",
+          "document"
+        ]
+      },
+      "ArchitectureSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ArchitectureId",
+            "readOnly": true
+          },
+          "name": {
+            "$ref": "#/components/schemas/ArchitectureName"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/UtcTimestamp",
+            "readOnly": true
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/UtcTimestamp",
+            "readOnly": true
+          },
+          "format_version": {
+            "$ref": "#/components/schemas/DocumentFormatVersion"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "updated_at",
+          "format_version"
+        ]
+      },
+      "ArchitectureList": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArchitectureSummary"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "type": "string",
+            "enum": [
+              "body",
+              "path"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^(|/.*)$",
+            "description": "JSON Pointer inside the specified location. Empty means the entire body."
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "required",
+              "unknown_field",
+              "invalid_type",
+              "invalid_value",
+              "unsupported_document_version",
+              "duplicate_id",
+              "missing_endpoint",
+              "duplicate_connection",
+              "duplicate_order",
+              "self_connection",
+              "cycle",
+              "forbidden_incoming",
+              "too_many_outgoing",
+              "forbidden_outgoing"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "location",
+          "path",
+          "code",
+          "message"
+        ]
+      },
+      "ApiError": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "invalid_json",
+              "unsupported_media_type",
+              "validation_error",
+              "unsupported_document_version",
+              "architecture_not_found",
+              "storage_unavailable",
+              "internal_error"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ErrorDetail"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      }
+    },
+    "parameters": {
+      "ArchitectureId": {
+        "name": "architecture_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/ArchitectureId"
+        },
+        "example": "0ccdc365-31f4-46c8-9f94-2b36d7f73b08",
+        "description": "UUID of a saved architecture. Malformed UUID gives 422; a valid absent UUID gives 404."
+      }
+    },
+    "requestBodies": {
+      "ArchitectureWrite": {
+        "required": true,
+        "description": "Whole desired saved name/document. All typed fields required; metadata and unknown fields are forbidden.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArchitectureWrite"
+            },
+            "examples": {
+              "empty": {
+                "summary": "Save an empty architecture",
+                "value": {
+                  "name": "Untitled architecture",
+                  "document": {
+                    "format_version": 1,
+                    "nodes": [],
+                    "edges": []
+                  }
+                }
+              },
+              "all_components": {
+                "summary": "Save all five component types, positions, relative weights, and destination order",
+                "value": {
+                  "name": "Application with database",
+                  "document": {
+                    "format_version": 1,
+                    "nodes": [
+                      {
+                        "id": "callers",
+                        "type": "caller_group",
+                        "label": "Callers",
+                        "position": {
+                          "x": -80,
+                          "y": 120.5
+                        },
+                        "capacity_rps": null,
+                        "caller_count": 100,
+                        "test_rps": 100
+                      },
+                      {
+                        "id": "lb",
+                        "type": "load_balancer",
+                        "label": "Load balancer",
+                        "position": {
+                          "x": 160,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 100,
+                        "routing_policy": "weighted"
+                      },
+                      {
+                        "id": "gateway",
+                        "type": "gateway",
+                        "label": "Gateway",
+                        "position": {
+                          "x": 400,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 100,
+                        "routing_policy": "round_robin"
+                      },
+                      {
+                        "id": "server",
+                        "type": "server",
+                        "label": "Server",
+                        "position": {
+                          "x": 640,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 60
+                      },
+                      {
+                        "id": "database",
+                        "type": "database",
+                        "label": "Database",
+                        "position": {
+                          "x": 880,
+                          "y": 120.5
+                        },
+                        "capacity_rps": 60
+                      }
+                    ],
+                    "edges": [
+                      {
+                        "id": "callers-lb",
+                        "source": "callers",
+                        "target": "lb",
+                        "order": 0,
+                        "weight": 1
+                      },
+                      {
+                        "id": "lb-gateway",
+                        "source": "lb",
+                        "target": "gateway",
+                        "order": 0,
+                        "weight": 1.5
+                      },
+                      {
+                        "id": "gateway-server",
+                        "source": "gateway",
+                        "target": "server",
+                        "order": 0,
+                        "weight": 0
+                      },
+                      {
+                        "id": "server-database",
+                        "source": "server",
+                        "target": "database",
+                        "order": 0,
+                        "weight": 1
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "InvalidJson": {
+        "description": "The request body must contain valid JSON.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": {
+                "code": "invalid_json",
+                "message": "The request body must contain valid JSON.",
+                "details": []
+              }
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "The request body must use application/json.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": {
+                "code": "unsupported_media_type",
+                "message": "The request body must use application/json.",
+                "details": []
+              }
+            }
+          }
+        }
+      },
+      "ArchitectureNotFound": {
+        "description": "The saved architecture was not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": {
+                "code": "architecture_not_found",
+                "message": "The saved architecture was not found.",
+                "details": []
+              }
+            }
+          }
+        }
+      },
+      "StorageUnavailable": {
+        "description": "The architecture library is temporarily unavailable.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": {
+                "code": "storage_unavailable",
+                "message": "The architecture library is temporarily unavailable.",
+                "details": []
+              }
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "The operation could not be completed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": {
+                "code": "internal_error",
+                "message": "The operation could not be completed.",
+                "details": []
+              }
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Invalid request body/path, graph structure, or unsupported document-format version. No mutation occurs.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "strict_type": {
+                "value": {
+                  "error": {
+                    "code": "validation_error",
+                    "message": "Some document fields are invalid.",
+                    "details": [
+                      {
+                        "location": "body",
+                        "path": "/document/nodes/2/capacity_rps",
+                        "code": "invalid_type",
+                        "message": "Capacity must be a positive JSON integer."
+                      }
+                    ]
+                  }
+                }
+              },
+              "missing_endpoint": {
+                "value": {
+                  "error": {
+                    "code": "validation_error",
+                    "message": "A connection points to a missing component.",
+                    "details": [
+                      {
+                        "location": "body",
+                        "path": "/document/edges/0/target",
+                        "code": "missing_endpoint",
+                        "message": "The target component does not exist."
+                      }
+                    ]
+                  }
+                }
+              },
+              "version": {
+                "value": {
+                  "error": {
+                    "code": "unsupported_document_version",
+                    "message": "Only document format version 1 is supported.",
+                    "details": [
+                      {
+                        "location": "body",
+                        "path": "/document/format_version",
+                        "code": "unsupported_document_version",
+                        "message": "This document-format version is not supported."
+                      }
+                    ]
+                  }
+                }
+              },
+              "path": {
+                "value": {
+                  "error": {
+                    "code": "validation_error",
+                    "message": "The architecture ID is invalid.",
+                    "details": [
+                      {
+                        "location": "path",
+                        "path": "/architecture_id",
+                        "code": "invalid_value",
+                        "message": "Architecture ID must be a UUID string."
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
