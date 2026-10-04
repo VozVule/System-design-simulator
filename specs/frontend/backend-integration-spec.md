@@ -25,3 +25,7 @@ Requested by the user on 2026-10-03 after the frontend editor and backend archit
 Keep separate editor/domain unit tests and browser acceptance tests. Add adapter unit coverage for request payloads, metadata, CRUD responses, structured errors, response validation, unavailable requests, and timeout without automatic retry. Cover field-pointer mapping and newer edits separately at the editor seam.
 
 Browser API tests must use the actual frontend and real backend with an isolated temporary SQLite database, separate from the developer's library. Verify button-triggered POST then PUT of the same ID, persisted canvas configuration and positions, reload/Open/Delete, pending Save edits, 404/validation failures, explicit network-failure retry, and Save before navigation. Retain the existing isolated placeholder acceptance tests for canvas gestures and browser-storage failures.
+
+## Save feedback
+
+After a successful create or replace response, show a visible, accessible success toast with the saved architecture name. Dismiss it after five seconds or with its Close button. Each successful Save resets the notice timer. Do not show success while a request is pending or after a failed Save. If newer edits exist, state that they remain unsaved. The Save button shows Saving with a spinner during requests and a green Saved state when the document is clean. Library refresh runs separately from the completed Save.

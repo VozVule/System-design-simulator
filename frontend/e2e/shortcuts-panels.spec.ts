@@ -9,18 +9,18 @@ test.beforeEach(async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']); await page.goto('/?test-store');
 });
 const savedItems = (page: Page): Promise<Architecture[]> => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{"items":[]}').items, storageKey);
-async function save(page: Page): Promise<void> { await page.getByRole('button', { name: 'Save', exact: true }).click(); await expect(page.getByRole('status')).toHaveText('Saved'); }
+async function save(page: Page): Promise<void> { await page.getByRole('button', { name: 'Save', exact: true }).click(); await expect(page.locator('.save-state')).toHaveText('Saved'); }
 
 test('native copy/paste shortcuts duplicate server configuration with new IDs and save through reload', async ({ page }) => {
   await page.getByLabel('Architecture name').fill('Clipboard'); await page.getByRole('button', { name: 'Add Server', exact: true }).click();
   await page.getByLabel('Label', { exact: true }).fill('Application'); await page.getByLabel('Maximum RPS').fill('240'); await moveComponentTo(page, 'Application', 0, 0);
   await page.getByRole('button', { name: 'Fit diagram', exact: true }).click(); await save(page);
   await page.getByRole('group', { name: 'Application component', exact: true }).click(); await page.keyboard.press('ControlOrMeta+c');
-  await expect(page.getByRole('status')).toHaveText('Saved');
+  await expect(page.locator('.save-state')).toHaveText('Saved');
   await page.getByRole('button', { name: 'Clear selection', exact: true }).click(); await page.keyboard.press('ControlOrMeta+v');
   await expect(page.getByLabel('Label', { exact: true })).toHaveValue('Application 2'); await expect(page.getByLabel('Maximum RPS')).toHaveValue('240');
   await expect(page.getByRole('group', { name: 'Application 2 component', exact: true })).toBeFocused();
-  await expect(page.getByRole('status')).toHaveText('Unsaved changes'); await page.keyboard.press('ControlOrMeta+v');
+  await expect(page.locator('.save-state')).toHaveText('Unsaved changes'); await page.keyboard.press('ControlOrMeta+v');
   await expect(page.getByLabel('Label', { exact: true })).toHaveValue('Application 3'); await save(page);
   const saved = (await savedItems(page))[0]; expect(saved.document.nodes).toHaveLength(3); expect(new Set(saved.document.nodes.map((node) => node.id)).size).toBe(3); expect(saved.document.edges).toEqual([]);
   expect(saved.document.nodes[1].position).not.toEqual(saved.document.nodes[2].position);
@@ -35,7 +35,7 @@ test('copied components stay usable across New and pasted edits survive an earli
   await expect(page.getByLabel('Routing policy')).toHaveValue('weighted'); await page.keyboard.press('ControlOrMeta+v'); await expect(page.getByRole('group', { name: / component$/ })).toHaveCount(2);
   await page.getByLabel('Architecture name').fill('Pasted document'); await page.evaluate(() => window.__studioTest?.holdNextSave()); await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.keyboard.press('ControlOrMeta+v'); await expect(page.getByRole('group', { name: / component$/ })).toHaveCount(3); await page.evaluate(() => window.__studioTest?.releaseSave());
-  await expect(page.getByRole('status')).toHaveText('Unsaved changes'); await save(page);
+  await expect(page.locator('.save-state')).toHaveText('Unsaved changes'); await save(page);
   const resource = (await savedItems(page)).find((item) => item.name === 'Pasted document')!;
   expect(resource.document.nodes).toHaveLength(3); expect(new Set(resource.document.nodes.map((node) => JSON.stringify(node.position))).size).toBe(3);
 });
@@ -87,7 +87,7 @@ test('both dividers resize by pointer and keyboard, reflow panel content, and pr
   await right.focus(); await right.press('Home'); await expect(right).toHaveAttribute('aria-valuenow', '200');
   await expect(page.getByLabel('Maximum RPS')).toBeVisible();
   await expect(page.getByLabel('Connect to', { exact: true })).toBeVisible();
-  await expect(page.getByRole('status')).toHaveText('Saved'); expect((await savedItems(page))[0]).toEqual(before);
+  await expect(page.locator('.save-state')).toHaveText('Saved'); expect((await savedItems(page))[0]).toEqual(before);
   expect(await inspector.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect((await page.getByRole('region', { name: 'Architecture canvas' }).boundingBox())!.width).toBeGreaterThanOrEqual(200);
 });

@@ -23,7 +23,7 @@ async function connectNodes(page: Page, source: string, target: string): Promise
 async function savedItems(page: Page): Promise<Architecture[]> {
   return page.evaluate((key) => { const text = localStorage.getItem(key); return text ? (JSON.parse(text) as { items: Architecture[] }).items : []; }, storageKey);
 }
-async function save(page: Page): Promise<void> { await saveButton(page).click(); await expect(page.getByRole('status')).toHaveText('Saved'); }
+async function save(page: Page): Promise<void> { await saveButton(page).click(); await expect(page.locator('.save-state')).toHaveText('Saved'); }
 async function openLibrary(page: Page): Promise<void> { await page.getByRole('button', { name: 'Library', exact: true }).click(); await expect(page.getByRole('dialog')).toBeVisible(); }
 async function reopen(page: Page, name: string): Promise<void> {
   await openLibrary(page); await page.getByRole('button', { name: new RegExp('^Open ' + name + ' ') }).click();
@@ -36,7 +36,7 @@ test('starts empty and saves a named empty architecture without backend requests
   await openLibrary(page); await expect(page.getByText('Your next idea belongs here.')).toBeVisible(); await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByLabel('Architecture name').fill('  First architecture  '); await save(page);
   await expect(page.getByLabel('Architecture name')).toHaveValue('First architecture'); expect(await savedItems(page)).toHaveLength(1);
-  await page.reload(); await reopen(page, 'First architecture'); await expect(page.getByRole('status')).toHaveText('Saved'); expect(backendRequests).toEqual([]);
+  await page.reload(); await reopen(page, 'First architecture'); await expect(page.locator('.save-state')).toHaveText('Saved'); expect(backendRequests).toEqual([]);
 });
 
 test('round-trips five component types and configured positions through Save and reload', async ({ page }) => {
@@ -95,17 +95,17 @@ test('Save, Discard and Cancel govern switching documents', async ({ page }) => 
 
 test('first pending Save preserves newer edits and never creates a second entry', async ({ page }) => {
   await page.goto('/?test-store'); await page.getByLabel('Architecture name').fill('First');
-  await page.evaluate(() => window.__studioTest?.holdNextSave()); await saveButton(page).click(); await expect(page.getByRole('status')).toHaveText('Saving…');
-  await page.getByLabel('Architecture name').fill('Second'); await page.evaluate(() => window.__studioTest?.releaseSave()); await expect(page.getByRole('status')).toHaveText('Unsaved changes');
+  await page.evaluate(() => window.__studioTest?.holdNextSave()); await saveButton(page).click(); await expect(page.locator('.save-state')).toHaveText('Saving…');
+  await page.getByLabel('Architecture name').fill('Second'); await page.evaluate(() => window.__studioTest?.releaseSave()); await expect(page.locator('.save-state')).toHaveText('Unsaved changes');
   expect((await savedItems(page))[0].name).toBe('First'); await save(page); expect(await savedItems(page)).toHaveLength(1); expect((await savedItems(page))[0].name).toBe('Second');
 });
 
 test('a real failed browser-storage write retains edits and the prior saved entry', async ({ page }) => {
   await page.getByLabel('Architecture name').fill('Original'); await save(page); const original = (await savedItems(page))[0];
   await page.evaluate(() => { const set = Storage.prototype.setItem; window.__failStorage = true; Storage.prototype.setItem = function (key, value) { if (window.__failStorage) throw new DOMException('Quota exceeded', 'QuotaExceededError'); set.call(this, key, value); }; });
-  await page.getByLabel('Architecture name').fill('Edited'); await saveButton(page).click(); await expect(page.getByRole('status')).toHaveText('Save failed');
+  await page.getByLabel('Architecture name').fill('Edited'); await saveButton(page).click(); await expect(page.locator('.save-state')).toHaveText('Save failed');
   expect((await savedItems(page))[0]).toEqual(original); await expect(page.getByLabel('Architecture name')).toHaveValue('Edited');
-  await page.evaluate(() => window.__failStorage = false); await page.getByRole('button', { name: /^Retry Save/ }).first().click(); await expect(page.getByRole('status')).toHaveText('Saved'); expect((await savedItems(page))[0].name).toBe('Edited');
+  await page.evaluate(() => window.__failStorage = false); await page.getByRole('button', { name: /^Retry Save/ }).first().click(); await expect(page.locator('.save-state')).toHaveText('Saved'); expect((await savedItems(page))[0].name).toBe('Edited');
 });
 
 test('confirms active deletion, warns about unsaved edits and preserves them on cancellation', async ({ page }) => {
@@ -113,7 +113,7 @@ test('confirms active deletion, warns about unsaved edits and preserves them on 
   await openLibrary(page); await page.getByRole('button', { name: /^Delete Delete me / }).click(); await expect(page.getByRole('dialog')).toContainText('unsaved changes will also be discarded');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await expect(page.getByRole('group', { name: 'Unsaved node component' })).toBeVisible();
   await openLibrary(page); await page.getByRole('button', { name: /^Delete Delete me / }).click(); await page.getByRole('button', { name: 'Delete architecture', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText('New architecture'); expect(await savedItems(page)).toEqual([]);
+  await expect(page.locator('.save-state')).toHaveText('New architecture'); expect(await savedItems(page)).toEqual([]);
 });
 
 test('redirection retains edge identity and node removal deletes incident edges', async ({ page }) => {
@@ -188,7 +188,7 @@ test('keyboard selection and inspector controls edit a graph without dragging', 
   await expect(page.getByLabel('Label', { exact: true })).toHaveValue('Keyboard node');
   const before = (await savedItems(page))[0].document.nodes[0].position;
   await page.getByLabel('Maximum RPS').fill('80'); await node.focus(); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowDown');
-  await page.getByLabel('Maximum RPS').press('ControlOrMeta+s'); await expect(page.getByRole('status')).toHaveText('Saved');
+  await page.getByLabel('Maximum RPS').press('ControlOrMeta+s'); await expect(page.locator('.save-state')).toHaveText('Saved');
   const moved = (await savedItems(page))[0].document.nodes[0]; expect(moved.capacity_rps).toBe(80); expect(moved.position).not.toEqual(before);
 });
 
@@ -202,7 +202,7 @@ test('New waits for a pending Save and then guards edits made after capture', as
 test('corrupt storage is surfaced and never silently reset', async ({ page }) => {
   await page.evaluate((key) => localStorage.setItem(key, 'not valid json'), storageKey);
   await openLibrary(page); await expect(page.getByRole('dialog')).toContainText('corrupt'); await page.getByRole('button', { name: 'Close', exact: true }).click();
-  await page.getByLabel('Architecture name').fill('Work survives'); await saveButton(page).click(); await expect(page.getByRole('status')).toHaveText('Save failed');
+  await page.getByLabel('Architecture name').fill('Work survives'); await saveButton(page).click(); await expect(page.locator('.save-state')).toHaveText('Save failed');
   expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe('not valid json'); await expect(page.getByLabel('Architecture name')).toHaveValue('Work survives');
 });
 
