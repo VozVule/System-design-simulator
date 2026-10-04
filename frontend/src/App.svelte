@@ -7,7 +7,7 @@
   import Field from './components/Field.svelte';
   import Modal from './components/Modal.svelte';
   import PanelDivider from './components/PanelDivider.svelte';
-  import { copyComponent, duplicateComponent, readComponentClipboard } from './lib/clipboard';
+  import { copySelection, duplicateSelection, readSelectionClipboard, selectionBounds } from './lib/clipboard';
   import { ArchitectureError, catalog, clone, connect, destinations, equal, newComponent, removeElements, reorder, typeName, weightPercent } from './lib/domain';
   import type { ArchitectureDocument, ArchitectureSummary, ComponentType } from './lib/domain';
   import { applySaveErrors, captureSave, clearElementDrafts, discardEditor, editField, fieldValue, finishSave, isDirty, newEditor, openEditor } from './lib/editor';
@@ -60,25 +60,28 @@
     return !locked && !libraryOpen && !navigation && !deleteTarget && !(target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
   }
   function copy(event: ClipboardEvent): void {
-    if (!clipboardAvailable(event) || !node || !event.clipboardData) return;
+    const components = document.nodes.filter((item) => selected.includes(item.id));
+    if (!clipboardAvailable(event) || !components.length || !event.clipboardData) return;
     event.preventDefault();
     try {
-      const text = copyComponent(editor, node.id);
+      const text = copySelection(editor, selected);
       event.clipboardData.setData('text/plain', text); clipboardText = text; pasteCount = 0;
-      clipboardNotice = `Copied ${node.label}. Paste with Ctrl/Cmd+V.`;
+      clipboardNotice = `Copied ${components.length === 1 ? components[0].label : components.length + ' components'}. Paste with Ctrl/Cmd+V.`;
     } catch (cause) { error = message(cause); }
   }
   function paste(event: ClipboardEvent): void {
     if (!clipboardAvailable(event) || !event.clipboardData) return;
     const text = event.clipboardData.getData('text/plain');
     try {
-      const copied = readComponentClipboard(text); if (!copied) return;
+      const copied = readSelectionClipboard(text); if (!copied) return;
       event.preventDefault();
       if (clipboardText !== text) { clipboardText = text; pasteCount = 0; }
-      const component = duplicateComponent(document, copied, canvas.pastePosition(copied.position, ++pasteCount));
-      changeDocument({ ...clone(document), nodes: [...document.nodes, component] }); selected = [component.id];
-      void canvas.focusComponent(component.id);
-      clipboardNotice = `Pasted ${component.label}.`;
+      const bounds = selectionBounds(copied), pasted = duplicateSelection(document, copied, canvas.pastePosition(bounds, ++pasteCount, bounds));
+      changeDocument({ ...clone(document), nodes: [...document.nodes, ...pasted.nodes], edges: [...document.edges, ...pasted.edges] });
+      selected = [...pasted.nodes, ...pasted.edges].map((item) => item.id);
+      if (pasted.nodes.length === 1) void canvas.focusComponent(pasted.nodes[0].id);
+      else void canvas.focusSelection(pasted.nodes.map((item) => item.id));
+      clipboardNotice = `Pasted ${pasted.nodes.length === 1 ? pasted.nodes[0].label : pasted.nodes.length + ' components'}.`;
     } catch (cause) { event.preventDefault(); error = message(cause); }
   }
   function add(type: ComponentType, at?: { x: number; y: number }): void {
@@ -259,7 +262,7 @@
           <button class="danger-text" onclick={() => { if (edge) remove([], [edge.id]); }}><Trash2 size={14} />Remove connection</button>
         </div>
       {:else if selected.length > 1}
-        <div class="inspector-content"><h2>{selected.length} items selected</h2><p class="inspector-intro">Drag the selection to move it. Press Delete to remove it.</p><button class="danger-text" onclick={() => remove(document.nodes.filter((n) => selected.includes(n.id)).map((n) => n.id), document.edges.filter((e) => selected.includes(e.id)).map((e) => e.id))}><Trash2 size={14} />Remove selected items</button></div>
+        <div class="inspector-content"><h2>{selected.length} items selected</h2><p class="inspector-intro">Drag the selection to move it. Press Delete to remove it.</p><p class="copy-hint">Ctrl/Cmd+C to copy this group. Ctrl/Cmd+V to paste it.</p><button class="danger-text" onclick={() => remove(document.nodes.filter((n) => selected.includes(n.id)).map((n) => n.id), document.edges.filter((e) => selected.includes(e.id)).map((e) => e.id))}><Trash2 size={14} />Remove selected items</button></div>
       {:else}
         <div class="inspector-empty"><div class="inspector-illustration"><SlidersHorizontal size={28} strokeWidth={1.4} /></div><h3>A closer look.</h3><p>Select a component or connection<br />to edit its properties.</p></div>
         <div class="inspector-tip"><span class="eyebrow">GOOD TO KNOW</span><p>Keep your graph acyclic.<br />Each arrow defines a direction<br />for traffic to follow.</p></div>

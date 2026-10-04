@@ -46,21 +46,28 @@
     // library's zoomIn/zoomOut shortcuts can capture the initial no-op store.
     void flow.setZoom(Math.max(0.2, Math.min(2, flow.getZoom() * 1.2 ** direction)));
   }
-  export function pastePosition(origin: { x: number; y: number }, count: number): { x: number; y: number } {
+  export function pastePosition(origin: { x: number; y: number }, count: number, size = { width: 194, height: 190 }): { x: number; y: number } {
     const bounds = element.getBoundingClientRect(), position = { x: origin.x + count * 32, y: origin.y + count * 32 };
     const available = (point: { x: number; y: number }): boolean => {
-      const screen = flow.flowToScreenPosition(point), end = flow.flowToScreenPosition({ x: point.x + 194, y: point.y + 190 });
+      const screen = flow.flowToScreenPosition(point), end = flow.flowToScreenPosition({ x: point.x + size.width, y: point.y + size.height });
       return screen.x >= bounds.left + 2 && screen.y >= bounds.top + 2 && end.x <= bounds.right - 2 && end.y <= bounds.bottom - 2
         && !document.nodes.some((node) => Math.abs(node.position.x - point.x) < 8 && Math.abs(node.position.y - point.y) < 8);
     };
     if (available(position)) return position;
-    const middle = center(); if (available(middle)) return middle;
+    const centerPoint = center(), middle = { x: centerPoint.x - (size.width - 194) / 2, y: centerPoint.y - (size.height - 190) / 2 };
+    if (available(middle)) return middle;
     // An offscreen source or a new document should still get distinct, visible pastes.
     for (let ring = 1; ring <= 8; ring++) for (let x = -ring; x <= ring; x++) for (let y = -ring; y <= ring; y++) {
       if (Math.max(Math.abs(x), Math.abs(y)) !== ring) continue;
       const point = { x: middle.x + x * 32, y: middle.y + y * 32 }; if (available(point)) return point;
     }
     return middle;
+  }
+  export async function focusSelection(ids: string[]): Promise<void> {
+    await tick(); await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (!ids.every((id) => selected.includes(id))) return;
+    await flow.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.2, maxZoom: 1, duration: 180 });
+    if (ids.every((id) => selected.includes(id))) element.focus({ preventScroll: true });
   }
   export async function focusComponent(id: string): Promise<void> {
     focusObserver?.disconnect(); await tick(); if (!selected.includes(id)) return;

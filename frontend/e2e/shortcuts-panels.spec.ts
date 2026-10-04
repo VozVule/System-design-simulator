@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import type { Architecture } from '../src/lib/domain';
+import { newComponent } from '../src/lib/domain';
 import { moveComponentTo } from './canvas-helpers';
 import { storageKey } from '../src/lib/storage';
 
@@ -101,4 +102,83 @@ test('viewport changes clamp panel widths without hiding controls or overflowing
   expect(await inspector.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect((await page.getByRole('region', { name: 'Architecture canvas' }).boundingBox())!.width).toBeGreaterThanOrEqual(200);
   await page.setViewportSize({ width: 1440, height: 850 }); await expect(page.getByRole('complementary', { name: 'Component palette' }).getByText('Components', { exact: true })).toBeVisible();
+});
+
+function groupResource(): Architecture {
+  const router = newComponent('load_balancer', { x: 0, y: 0 }, 'router');
+  if (router.type === 'load_balancer') { router.routing_policy = 'weighted'; router.capacity_rps = 320; }
+  const nodes = [router, newComponent('server', { x: 250, y: 0 }, 'app'), newComponent('database', { x: 500, y: 0 }, 'data'), newComponent('database', { x: 0, y: 250 }, 'external')];
+  nodes[0].label = 'Router'; nodes[1].label = 'App'; nodes[2].label = 'Data'; nodes[3].label = 'External';
+  return { id: crypto.randomUUID(), name: 'Group clipboard', created_at: '2026-10-04T07:00:00Z', updated_at: '2026-10-04T07:00:00Z', document: { format_version: 1, nodes, edges: [
+    { id: 'internal', source: 'router', target: 'app', order: 3, weight: 1.5 },
+    { id: 'data-path', source: 'app', target: 'data', order: 0, weight: 1 },
+    { id: 'external-path', source: 'router', target: 'external', order: 7, weight: 0 },
+  ] } };
+}
+async function selectClipboardGroup(page: Page): Promise<void> {
+  await page.waitForTimeout(250); await page.getByRole('button', { name: 'Select mode', exact: true }).click();
+  const left = (await page.getByRole('group', { name: 'Router component', exact: true }).boundingBox())!;
+  const right = (await page.getByRole('group', { name: 'Data component', exact: true }).boundingBox())!;
+  await page.mouse.move(left.x - 10, left.y - 10); await page.mouse.down();
+  await page.mouse.move(right.x + right.width + 10, right.y + right.height + 10, { steps: 15 }); await page.mouse.up();
+  await expect(page.locator('.svelte-flow__node.selected')).toHaveCount(3);
+}
+function expectPastedGroup(original: Architecture['document'], pasted: Architecture['document']): void {
+  expect(pasted.nodes).toHaveLength(3); expect(pasted.edges).toHaveLength(2);
+  const originals = original.nodes.slice(0, 3);
+  for (const [index, node] of pasted.nodes.entries()) {
+    expect(node.id).not.toBe(originals[index].id);
+    expect(node.position.x - pasted.nodes[0].position.x).toBeCloseTo(originals[index].position.x - originals[0].position.x);
+    expect(node.position.y - pasted.nodes[0].position.y).toBeCloseTo(originals[index].position.y - originals[0].position.y);
+    expect(node.capacity_rps).toBe(originals[index].capacity_rps);
+  }
+  expect(pasted.nodes[0]).toMatchObject({ routing_policy: 'weighted' });
+  expect(pasted.edges).toEqual([
+    { id: expect.any(String), source: pasted.nodes[0].id, target: pasted.nodes[1].id, order: 3, weight: 1.5 },
+    { id: expect.any(String), source: pasted.nodes[1].id, target: pasted.nodes[2].id, order: 0, weight: 1 },
+  ]);
+}
+
+test('box-selected groups copy and paste their layout and internal connections repeatedly and across New', async ({ page }) => {
+  const resource = groupResource();
+  await page.evaluate(({ key, resource }) => localStorage.setItem(key, JSON.stringify({ store_version: 1, items: [resource] })), { key: storageKey, resource });
+  await page.getByRole('button', { name: 'Library', exact: true }).click(); await page.getByRole('button', { name: /^Open Group clipboard / }).click();
+  await selectClipboardGroup(page); await page.keyboard.press('ControlOrMeta+c');
+  await expect(page.locator('.save-state')).toHaveText('Saved'); await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveClass(/save-complete/);
+  const snapshot = await page.evaluate(() => navigator.clipboard.readText());
+  const copied = JSON.parse(snapshot); expect(copied.kind).toBe('sysd-selection'); expect(copied.document.nodes).toHaveLength(3); expect(copied.document.edges).toHaveLength(2);
+  await page.keyboard.press('ControlOrMeta+v'); await expect(page.getByRole('group', { name: / component$/ })).toHaveCount(7);
+  await expect(page.locator('.svelte-flow__node.selected')).toHaveCount(3); await expect(page.getByRole('region', { name: 'Architecture canvas' })).toBeFocused();
+  await page.keyboard.press('ControlOrMeta+v'); await expect(page.getByRole('group', { name: / component$/ })).toHaveCount(10); await save(page);
+  const saved = (await savedItems(page))[0]; expect(saved.document.edges).toHaveLength(7);
+  expect(saved.document.nodes.slice(0, 4)).toEqual(resource.document.nodes); expect(saved.document.edges.slice(0, 3)).toEqual(resource.document.edges);
+  const first = { format_version: 1 as const, nodes: saved.document.nodes.slice(4, 7), edges: saved.document.edges.slice(3, 5) };
+  const second = { format_version: 1 as const, nodes: saved.document.nodes.slice(7), edges: saved.document.edges.slice(5) };
+  expectPastedGroup(resource.document, first); expectPastedGroup(resource.document, second);
+  expect(first.nodes[0].position).not.toEqual(second.nodes[0].position);
+  expect(second.nodes.map((node) => node.label)).toEqual(['Router 3', 'App 3', 'Data 3']);
+  expect(new Set([...saved.document.nodes, ...saved.document.edges].map((item) => item.id)).size).toBe(17);
+  await page.reload(); await page.getByRole('button', { name: 'Library', exact: true }).click(); await page.getByRole('button', { name: /^Open Group clipboard / }).click();
+  await expect(page.getByRole('group', { name: / component$/ })).toHaveCount(10); expect((await savedItems(page))[0]).toEqual(saved);
+  await page.getByRole('button', { name: 'New', exact: true }).click(); await page.keyboard.press('ControlOrMeta+v');
+  await expect(page.locator('.svelte-flow__node.selected')).toHaveCount(3); await save(page);
+  const elsewhere = (await savedItems(page)).find((item) => item.id !== saved.id)!;
+  expectPastedGroup(resource.document, elsewhere.document);
+});
+
+test('group copy through the native clipboard saves with remapped connections through backend PUT and reopen', async ({ page }) => {
+  const fixture = groupResource(), endpoint = 'http://127.0.0.1:8000/api/v1/architectures';
+  const response = await page.request.post(endpoint, { data: { name: `Backend group ${crypto.randomUUID()}`, document: fixture.document } });
+  expect(response.status()).toBe(201); const original = await response.json() as Architecture;
+  await page.goto('/'); await page.getByRole('button', { name: 'Library', exact: true }).click();
+  await page.getByRole('button', { name: `Open ${original.name} ${original.id.slice(0, 8)}`, exact: true }).click();
+  await selectClipboardGroup(page); await page.keyboard.press('ControlOrMeta+c'); await page.keyboard.press('ControlOrMeta+v');
+  await expect(page.locator('.svelte-flow__node.selected')).toHaveCount(3);
+  const replace = page.waitForResponse((response) => response.url() === `${endpoint}/${original.id}` && response.request().method() === 'PUT'); await save(page);
+  const updated = await (await replace).json() as Architecture;
+  expect(updated.document.nodes).toHaveLength(7); expect(updated.document.edges).toHaveLength(5);
+  expectPastedGroup(original.document, { format_version: 1, nodes: updated.document.nodes.slice(4), edges: updated.document.edges.slice(3) });
+  await page.reload(); await page.getByRole('button', { name: 'Library', exact: true }).click();
+  await page.getByRole('button', { name: `Open ${updated.name} ${updated.id.slice(0, 8)}`, exact: true }).click();
+  await expect(page.getByRole('group', { name: / component$/ })).toHaveCount(7); await expect(page.getByRole('group', { name: / connection$/ })).toHaveCount(5);
 });
