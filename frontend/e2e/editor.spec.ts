@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { Architecture } from '../src/lib/domain';
 import type { StudioTestControl } from '../src/test-store';
+import { moveComponentTo } from './canvas-helpers';
 import { storageKey } from '../src/lib/storage';
 declare global { interface Window { __studioTest?: StudioTestControl; __failStorage?: boolean } }
 
@@ -9,7 +10,7 @@ const saveButton = (page: Page) => page.getByRole('button', { name: /^Save(?:⌘
 async function add(page: Page, type: string, label: string, x: number, y: number): Promise<void> {
   await page.getByRole('button', { name: 'Add ' + type, exact: true }).click();
   await page.getByLabel('Label', { exact: true }).fill(label);
-  await page.getByLabel('X position').fill(String(x)); await page.getByLabel('Y position').fill(String(y));
+  await moveComponentTo(page, label, x, y);
 }
 async function select(page: Page, label: string): Promise<void> {
   await page.getByRole('group', { name: label + ' component', exact: true }).click();
@@ -48,7 +49,7 @@ test('round-trips five component types and configured positions through Save and
   await save(page); const before = (await savedItems(page))[0]; expect(before.document.nodes).toHaveLength(5); expect(before.document.edges).toHaveLength(4);
   await page.reload(); await reopen(page, 'Application');
   await expect(page.getByRole('group', { name: / component$/ })).toHaveCount(5);
-  await select(page, 'Clients'); await expect(page.getByLabel('Caller count')).toHaveValue('150'); await expect(page.getByLabel('Total test RPS')).toHaveValue('240'); await expect(page.getByLabel('X position')).toHaveValue('-80.5');
+  await select(page, 'Clients'); await expect(page.getByLabel('Caller count')).toHaveValue('150'); await expect(page.getByLabel('Total test RPS')).toHaveValue('240');
   await select(page, 'App'); await expect(page.getByLabel('Maximum RPS')).toHaveValue('60'); expect((await savedItems(page))[0]).toEqual(before);
 });
 
@@ -185,9 +186,10 @@ test('keyboard selection and inspector controls edit a graph without dragging', 
   await page.getByRole('button', { name: 'Clear selection', exact: true }).click();
   const node = page.getByRole('group', { name: 'Keyboard node component', exact: true }); await node.focus(); await page.keyboard.press('Enter');
   await expect(page.getByLabel('Label', { exact: true })).toHaveValue('Keyboard node');
-  await page.getByLabel('Maximum RPS').fill('80'); await page.getByLabel('X position').fill('-1.5'); await page.getByLabel('Y position').fill('35');
+  const before = (await savedItems(page))[0].document.nodes[0].position;
+  await page.getByLabel('Maximum RPS').fill('80'); await node.focus(); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowDown');
   await page.getByLabel('Maximum RPS').press('ControlOrMeta+s'); await expect(page.getByRole('status')).toHaveText('Saved');
-  expect((await savedItems(page))[0].document.nodes[0]).toMatchObject({ capacity_rps: 80, position: { x: -1.5, y: 35 } });
+  const moved = (await savedItems(page))[0].document.nodes[0]; expect(moved.capacity_rps).toBe(80); expect(moved.position).not.toEqual(before);
 });
 
 test('New waits for a pending Save and then guards edits made after capture', async ({ page }) => {

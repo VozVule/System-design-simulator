@@ -1,7 +1,8 @@
 import { test, expect, type Page, type Response } from '@playwright/test';
+import { moveComponentTo } from './canvas-helpers';
 import type { Architecture } from '../src/lib/domain';
 
-const endpoint = 'http://127.0.0.1:18000/api/v1/architectures';
+const endpoint = 'http://127.0.0.1:8000/api/v1/architectures';
 const saveButton = (page: Page) => page.getByRole('button', { name: 'Save', exact: true });
 const mutation = (method: 'POST' | 'PUT') => (response: Response) => response.url().startsWith(endpoint) && response.request().method() === method;
 async function save(page: Page, method: 'POST' | 'PUT'): Promise<Architecture> {
@@ -21,16 +22,17 @@ test('Save creates via POST, canvas edits replace via PUT, and the backend libra
   const name = `Backend round trip ${crypto.randomUUID()}`;
   await page.getByLabel('Architecture name').fill(`  ${name}  `);
   await page.getByRole('button', { name: 'Add Server', exact: true }).click();
-  await page.getByLabel('Label', { exact: true }).fill('Application'); await page.getByLabel('X position').fill('-12.5');
+  await page.getByLabel('Label', { exact: true }).fill('Application'); await moveComponentTo(page, 'Application', -12.5, 0);
   expect(requests).toEqual([]); const created = await save(page, 'POST');
   await expect(page.getByLabel('Architecture name')).toHaveValue(name);
-  await page.getByLabel('Maximum RPS').fill('240'); await page.getByLabel('Y position').fill('80');
+  await page.getByLabel('Maximum RPS').fill('240'); await moveComponentTo(page, 'Application', -12.5, 80);
   const updated = await save(page, 'PUT');
   expect(updated.id).toBe(created.id); expect(updated.created_at).toBe(created.created_at); expect(updated.updated_at).not.toBe(created.updated_at);
-  expect(updated.document.nodes[0]).toMatchObject({ label: 'Application', capacity_rps: 240, position: { x: -12.5, y: 80 } });
+  expect(updated.document.nodes[0]).toMatchObject({ label: 'Application', capacity_rps: 240 });
+  expect(updated.document.nodes[0].position.y).toBeGreaterThan(created.document.nodes[0].position.y + 30);
   expect(requests).toEqual(['POST', 'PUT']); expect(await (await page.request.get(`${endpoint}/${created.id}`)).json()).toEqual(updated);
   await page.reload(); await open(page, updated);
-  await page.getByRole('group', { name: 'Application component', exact: true }).click(); await expect(page.getByLabel('Maximum RPS')).toHaveValue('240'); await expect(page.getByLabel('Y position')).toHaveValue('80');
+  await page.getByRole('group', { name: 'Application component', exact: true }).click(); await expect(page.getByLabel('Maximum RPS')).toHaveValue('240'); await expect(page.getByText('CANVAS POSITION', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Library', exact: true }).click();
   await page.getByRole('button', { name: `Delete ${updated.name} ${updated.id.slice(0, 8)}`, exact: true }).click();
   await page.getByRole('button', { name: 'Delete architecture', exact: true }).click();

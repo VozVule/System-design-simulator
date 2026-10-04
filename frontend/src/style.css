@@ -117,7 +117,6 @@ h1, h2, h3, p { margin: 0; }
 .field-error { color: #b14e50; font-size: 10px; line-height: 1.6; margin-top: 6px; }
 .section-label { display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 10px; font-weight: 600; letter-spacing: 1px; border-top: 1px solid #eef0f4; margin-top: 24px; padding-top: 19px; margin-bottom: 15px; }
 .section-label span { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: #f4f4f8; }
-.coordinate-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
 .compact { margin-bottom: 0; }
 .muted { font-size: 11px; color: var(--text-muted); }
 .destination-row { border: 1px solid #e7e9ef; border-radius: 7px; padding: 10px; margin-bottom: 8px; }
@@ -189,7 +188,6 @@ dialog h2 { font-size: 20px; letter-spacing: -.5px; font-weight: 570; }
 @container inspector (max-width: 260px) {
   .inspector-content { padding: 20px 12px; }
   .inspector-heading { padding-inline: 12px; }
-  .coordinate-fields { grid-template-columns: minmax(0, 1fr); }
   .destination-name { flex-wrap: wrap; }
   .destination-name > button { flex-basis: 100%; }
   .order-buttons { margin-left: auto; }

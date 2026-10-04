@@ -90,13 +90,13 @@
     } else if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault(); onremove(nodes.filter((n) => n.selected).map((n) => n.id), edges.filter((e) => e.selected).map((e) => e.id));
     } else if (event.key.startsWith('Arrow')) {
-      setTimeout(() => positions(nodes), 0);
+      positions(flow.getNodes());
     }
   }
 </script>
 <svelte:window onkeydown={(event) => { if (event.target instanceof window.Node && element?.contains(event.target)) keydown(event); }} />
 <div class="canvas" bind:this={element} role="region" aria-label="Architecture canvas" tabindex="-1" ondrop={drop} ondragover={(event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'; }}>
-  <SvelteFlow bind:nodes bind:edges {nodeTypes} {edgeTypes} defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed, color: '#959dac', width: 18, height: 18 } }} minZoom={0.2} maxZoom={2} deleteKey={null} multiSelectionKey="Shift" selectionKey={null} selectionOnDrag={selectMode && !locked} panOnDrag={selectMode ? [1, 2] : true} elementsSelectable={!locked}
+  <SvelteFlow bind:nodes bind:edges {nodeTypes} {edgeTypes} defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed, color: '#959dac', width: 18, height: 18 } }} minZoom={0.2} maxZoom={2} deleteKey={null} multiSelectionKey="Shift" selectionOnDrag={selectMode && !locked} panOnDrag={selectMode ? [1, 2] : true} elementsSelectable={!locked}
     nodesDraggable={!locked} nodesConnectable={!locked} nodesFocusable={!locked} edgesFocusable={!locked}
     onselectionchange={() => void selectionChanged()}
     onselectionend={() => element.focus({ preventScroll: true })}

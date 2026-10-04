@@ -41,7 +41,7 @@ npx playwright install chromium
 npm run verify
 ```
 
-`verify` runs strict Svelte/TypeScript checking, editor/domain/store unit tests, Chromium acceptance tests against the real frontend, and the production build. Browser tests start a separate frontend on port 5174 and the real backend on port 18000 using `.venv/bin/python` and a temporary SQLite database. These ports must be available and backend dependencies must already be installed. Tests never modify the developer's saved library.
+`verify` runs strict Svelte/TypeScript checking, editor/domain/store unit tests, Chromium acceptance tests against the real frontend, and the production build. Browser tests run `scripts/start.sh` on ports 5173 and 8000 with a temporary SQLite database. Stop an existing launcher first; both ports must be available. Install backend dependencies in `.venv` and frontend dependencies with `npm --prefix frontend ci` before running browser tests. Tests never modify the developer's saved library.
 
 API acceptance tests cover first Save POST, later PUT, backend reopening/deletion, copied connected components, pending Save edits, real validation/404 responses, disconnected requests, and Save before navigation. Canvas acceptance tests use the development-only browser placeholder store to isolate graph gestures, native clipboard shortcuts, panel resizing/reflow, and storage-failure cases. Backend unit/HTTP tests remain separate.
 

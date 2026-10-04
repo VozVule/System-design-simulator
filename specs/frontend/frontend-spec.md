@@ -107,7 +107,7 @@ Keep saved documents compatible with the existing OpenAPI design contract. The p
 - Keep Svelte Flow presentation objects separate from the contract document. Explicit mapping retains every contract field and excludes handles, selection flags, dimensions, viewport state, validation messages, and other canvas-library properties. The canvas and inspectors update the same working domain document; they must not maintain divergent copies of the graph.
 - Generate stable component and connection IDs that satisfy the contract pattern and are unique across both collections. Moving, configuring, reordering, saving, and reopening preserve those IDs. Architecture IDs are a separate UUID v4 namespace assigned by the placeholder store on first Save, standing in for future backend-generated IDs.
 - Preserve node and edge array order. Destination routing order is determined by the edge order field per source, independently of the global edge-array order. Do not derive it from horizontal position, rendering order, or node labels.
-- Positions are finite canvas coordinates, including negative and fractional values. Convert palette drops through the current pan/zoom transform. Dragging an existing node changes its persisted position; pan, zoom, fit-to-view, focus, and selection do not mark the architecture changed.
+- The inspector does not show Canvas Position fields. Use canvas dragging or focused-node arrow keys to change positions. Positions are finite canvas coordinates, including negative and fractional values. Convert palette drops through the current pan/zoom transform. Dragging an existing node changes its persisted position; pan, zoom, fit-to-view, focus, and selection do not mark the architecture changed.
 - On reopening, use saved node coordinates and fit the viewport around the diagram. The exact former viewport is not saved. An empty canvas uses a sensible initial view.
 - Do not save simulation results, playback state, runtime tick count, or derived routing cursors. format_version describes the document format, not retained historical revisions.
 
@@ -117,11 +117,11 @@ All new components must be complete, correctly typed objects before the user sup
 
 | Component | Contract tag | Initial configuration | Inspector fields |
 | --- | --- | --- | --- |
-| Caller Group | caller_group | caller_count 100; test_rps 100; capacity_rps null | Label, caller count, total test RPS, position. No capacity input. |
-| Load Balancer | load_balancer | capacity_rps 100; routing_policy round_robin | Label, maximum RPS, routing policy, destinations, position. |
-| Gateway | gateway | capacity_rps 100; routing_policy round_robin | Label, maximum RPS, routing policy, destinations, position. |
-| Server | server | capacity_rps 100 | Label, maximum RPS, position. Zero or one outgoing connection. |
-| Database | database | capacity_rps 100 | Label, maximum RPS, position. No outgoing connection. |
+| Caller Group | caller_group | caller_count 100; test_rps 100; capacity_rps null | Label, caller count, total test RPS. No capacity input. |
+| Load Balancer | load_balancer | capacity_rps 100; routing_policy round_robin | Label, maximum RPS, routing policy, destinations. |
+| Gateway | gateway | capacity_rps 100; routing_policy round_robin | Label, maximum RPS, routing policy, destinations. |
+| Server | server | capacity_rps 100 | Label, maximum RPS. Zero or one outgoing connection. |
+| Database | database | capacity_rps 100 | Label, maximum RPS. No outgoing connection. |
 
 - New labels begin with the component's domain name. A numeric suffix may distinguish repeated types; duplicate labels are allowed and IDs determine identity.
 - An Add button places a node near the visible canvas center with an offset from existing nodes. Select the new node and show its inspector.
@@ -196,7 +196,7 @@ All new components must be complete, correctly typed objects before the user sup
 ### Accessibility and interaction feedback
 
 - Give palette controls, nodes, edge actions, form fields, and dialogs accessible names. Provide visible focus, labeled validation messages, and text save/error states; do not communicate solely with color.
-- Keyboard selection must reach node/connection inspectors. Add buttons, numeric position controls, endpoint selectors, and destination Move up/Move down actions cover the essential workflow without pointer dragging.
+- Keyboard selection must reach node/connection inspectors. Add buttons, arrow-key component movement, endpoint selectors, and destination Move up/Move down actions cover the essential workflow without pointer dragging.
 - Dialogs manage focus, return focus to the triggering control on cancellation, and do not leak deletion shortcuts to the canvas. Graph mutations triggered by keyboard and pointer use the same validation and document-edit behavior.
 
 ## Testing Decisions
@@ -221,13 +221,13 @@ Acceptance scenarios:
 6. Open a saved architecture, move/add/remove nodes, redirect/remove edges, rename, and Save. Reopen the same ID to verify whole-document replacement, incident-edge removal, retained created timestamp, and advanced last-saved timestamp.
 7. Attempt a self-connection, cycle, duplicate connection, incoming Caller Group connection, second Server output, and Database output. Each action explains the issue and retains the previous valid diagram. A valid merge into a processing component succeeds.
 8. Save disconnected components, a Caller Group without an output, a router without destinations, and an all-zero weighted router. These states remain saveable despite incomplete-routing hints.
-9. Enter blank/invalid names, labels, capacities, caller counts, RPS, coordinates, and weights. Feedback is attached to the relevant controls, Save cannot persist stale valid values, and field drafts survive selection changes until corrected or explicitly discarded.
+9. Enter blank/invalid names, labels, capacities, caller counts, RPS, and weights. Feedback is attached to the relevant controls, Save cannot persist stale valid values, and field drafts survive selection changes until corrected or explicitly discarded.
 10. Open/New from a changed architecture and exercise Save, Discard, and Cancel. Save persists before navigation; Discard restores/abandons the appropriate draft; Cancel preserves the working diagram and form drafts. An invalid or failed navigation Save does not leave the editor.
 11. Exercise a delayed ordinary Save, edit again before completion, and verify that success retains the newer edit and changed state. The next Save updates the same library entry. Document-switching waits for pending Save completion and still protects newer changes.
 12. Cause a storage write failure on Save and Delete. The editor retains current work, the prior saved entry and timestamp remain unchanged, errors are visible, and retry succeeds after the failure is removed. Unavailable/corrupt storage is not silently reset or presented as saved.
 13. List entries with duplicate names and verify ordering/identity, open one, cancel a deletion, and then confirm it. Deleting another entry preserves the editor; deleting the active one resets only after success and clearly warns about unsaved work.
 14. Make an entry unavailable before Open or replacement. The error leaves the current diagram intact; refreshing the library updates its contents, and replacement does not silently create a new entry.
-15. Exercise component addition, selection, inspector edits, connection/position controls, destination reordering, Save, and dialogs with the keyboard. Delete in a numeric/name field changes text rather than deleting a selected node. Selection, pan, and zoom alone do not mark the document changed.
+15. Exercise component addition, selection, inspector edits, connection controls and arrow-key movement, destination reordering, Save, and dialogs with the keyboard. Delete in a numeric/name field changes text rather than deleting a selected node. Selection, pan, and zoom alone do not mark the document changed.
 16. Exercise the browser leave-warning hook after user interaction where automation supports native dialogs. Verify clean-versus-changed registration through observable navigation behavior. Do not claim protection against browser/process termination paths that cannot fire the warning.
 
 ### Editor/domain unit tests

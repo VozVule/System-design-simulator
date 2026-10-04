@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import type { Architecture } from '../src/lib/domain';
+import { moveComponentTo } from './canvas-helpers';
 import { storageKey } from '../src/lib/storage';
 
 // Native clipboard contents are shared by browser pages; keep clipboard checks sequential.
@@ -12,7 +13,7 @@ async function save(page: Page): Promise<void> { await page.getByRole('button', 
 
 test('native copy/paste shortcuts duplicate server configuration with new IDs and save through reload', async ({ page }) => {
   await page.getByLabel('Architecture name').fill('Clipboard'); await page.getByRole('button', { name: 'Add Server', exact: true }).click();
-  await page.getByLabel('Label', { exact: true }).fill('Application'); await page.getByLabel('Maximum RPS').fill('240'); await page.getByLabel('X position').fill('0'); await page.getByLabel('Y position').fill('0');
+  await page.getByLabel('Label', { exact: true }).fill('Application'); await page.getByLabel('Maximum RPS').fill('240'); await moveComponentTo(page, 'Application', 0, 0);
   await page.getByRole('button', { name: 'Fit diagram', exact: true }).click(); await save(page);
   await page.getByRole('group', { name: 'Application component', exact: true }).click(); await page.keyboard.press('ControlOrMeta+c');
   await expect(page.getByRole('status')).toHaveText('Saved');
@@ -40,11 +41,11 @@ test('copied components stay usable across New and pasted edits survive an earli
 });
 
 test('a copied connected server saves through PUT with its own ID and the original connection intact', async ({ page }) => {
-  await page.goto('/'); const endpoint = 'http://127.0.0.1:18000/api/v1/architectures';
+  await page.goto('/'); const endpoint = 'http://127.0.0.1:8000/api/v1/architectures';
   await page.getByLabel('Architecture name').fill(`Clipboard backend ${crypto.randomUUID()}`);
   await page.getByRole('button', { name: 'Add Server', exact: true }).click(); await page.getByLabel('Label', { exact: true }).fill('Application');
-  await page.getByLabel('Maximum RPS').fill('320'); await page.getByLabel('X position').fill('0'); await page.getByLabel('Y position').fill('0');
-  await page.getByRole('button', { name: 'Add Database', exact: true }).click(); await page.getByLabel('X position').fill('250'); await page.getByLabel('Y position').fill('0'); await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+  await page.getByLabel('Maximum RPS').fill('320'); await moveComponentTo(page, 'Application', 0, 0);
+  await page.getByRole('button', { name: 'Add Database', exact: true }).click(); await moveComponentTo(page, 'Database', 250, 0); await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
   await page.getByRole('group', { name: 'Application component', exact: true }).click(); await page.getByLabel('Connect to', { exact: true }).selectOption({ label: 'Database' }); await page.getByRole('button', { name: 'Connect', exact: true }).click();
   const create = page.waitForResponse((response) => response.url() === endpoint && response.request().method() === 'POST'); await save(page); const original = await (await create).json() as Architecture;
   await page.getByRole('group', { name: 'Application component', exact: true }).click(); await page.keyboard.press('ControlOrMeta+c'); await page.keyboard.press('ControlOrMeta+v');
@@ -84,8 +85,8 @@ test('both dividers resize by pointer and keyboard, reflow panel content, and pr
   await page.mouse.move(rightBox.x + 4, rightBox.y + 180); await page.mouse.down(); await page.mouse.move(rightBox.x - 70, rightBox.y + 180, { steps: 10 }); await page.mouse.up();
   expect((await inspector.boundingBox())!.width).toBeGreaterThan(initialRight + 50);
   await right.focus(); await right.press('Home'); await expect(right).toHaveAttribute('aria-valuenow', '200');
-  const x = (await page.getByLabel('X position').boundingBox())!, y = (await page.getByLabel('Y position').boundingBox())!;
-  expect(y.y).toBeGreaterThan(x.y + x.height); expect(Math.abs(y.x - x.x)).toBeLessThan(1);
+  await expect(page.getByLabel('Maximum RPS')).toBeVisible();
+  await expect(page.getByLabel('Connect to', { exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toHaveText('Saved'); expect((await savedItems(page))[0]).toEqual(before);
   expect(await inspector.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect((await page.getByRole('region', { name: 'Architecture canvas' }).boundingBox())!.width).toBeGreaterThanOrEqual(200);
