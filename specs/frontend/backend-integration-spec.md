@@ -28,4 +28,4 @@ Browser API tests must use the actual frontend and real backend with an isolated
 
 ## Save feedback
 
-After a successful create or replace response, show a visible, accessible success toast with the saved architecture name. Dismiss it after five seconds or with its Close button. Each successful Save resets the notice timer. Do not show success while a request is pending or after a failed Save. If newer edits exist, state that they remain unsaved. The Save button shows Saving with a spinner during requests and a green Saved state when the document is clean. Library refresh runs separately from the completed Save.
+The Save button shows Saving with a spinner during requests and a green Saved state after a successful response when the document is clean. Keep Saved visible until a document edit is made; selection, mode, pan, zoom, and panel changes do not clear it. Show no toast. If newer edits exist when a Save completes, keep Unsaved changes and the enabled Save action. Failed requests show Save failed and Retry Save. Library refresh runs separately from the completed Save.

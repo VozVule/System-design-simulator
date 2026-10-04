@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { SvelteFlowProvider } from '@xyflow/svelte';
   import { Plus, Save, FolderOpen, ArrowUpRight, ArrowRight, ChevronUp, ChevronDown, X, Trash2, SlidersHorizontal, Network, Check, Circle, LoaderCircle, RefreshCw, Layers, PencilLine } from '@lucide/svelte';
   import Canvas from './components/Canvas.svelte';
@@ -26,8 +26,6 @@
   let paletteWidth = $state(246), inspectorWidth = $state(286), workspaceWidth = $state(1280);
   let clipboardText = '', pasteCount = 0;
   let clipboardNotice = $state('');
-  let saveNotice = $state(''), saveNoticeTimer: ReturnType<typeof setTimeout> | undefined;
-  onDestroy(() => clearTimeout(saveNoticeTimer));
   const panelSpace = $derived(Math.max(264, workspaceWidth - 216));
   const shownInspector = $derived(Math.min(inspectorWidth, Math.max(200, panelSpace - 64)));
   const shownPalette = $derived(Math.min(paletteWidth, Math.max(64, panelSpace - shownInspector)));
@@ -122,24 +120,18 @@
     catch (cause) { libraryError = message(cause); }
     finally { loading = false; }
   }
-  function dismissSaveNotice(): void { clearTimeout(saveNoticeTimer); saveNotice = ''; }
-  function notifySaved(name: string): void {
-    dismissSaveNotice();
-    saveNotice = `Saved “${name}”.${isDirty(editor) ? ' Newer changes are still unsaved.' : ''}`;
-    saveNoticeTimer = setTimeout(dismissSaveNotice, 5000);
-  }
   function save(): Promise<boolean> {
     if (pendingSave) return pendingSave;
     let snapshot;
     try { snapshot = captureSave(editor); }
     catch (cause) { error = message(cause); return Promise.resolve(false); }
     const id = editor.id;
-    saving = true; saveFailed = false; error = ''; dismissSaveNotice();
+    saving = true; saveFailed = false; error = '';
     pendingSave = (async () => {
       try {
         const result = id ? await store.replace(id, snapshot) : await store.create(snapshot);
         editor = finishSave(editor, snapshot, result);
-        saving = false; notifySaved(result.name);
+        saving = false;
         void refreshLibrary(); return true;
       } catch (cause) {
         if (cause instanceof ArchitectureError) editor = applySaveErrors(editor, snapshot, cause.response.error.details);
@@ -279,7 +271,6 @@
   <footer class="app-footer"><span><span class="local-dot"></span>Local workspace</span><span>{document.nodes.length} components<span class="footer-dot">·</span>{document.edges.length} connections</span><span>{store.storageKind === 'backend' ? 'Saved to local library' : 'Saved in this browser'}<span class="footer-dot">·</span>Simulation coming later</span></footer>
 </div>
 
-<div class="save-notification-region" role="status" aria-live="polite" aria-atomic="true">{#if saveNotice}<div class="save-notification"><Check size={20} /><div><strong>Architecture saved</strong><p>{saveNotice}</p></div><button class="icon-button" aria-label="Dismiss save notification" onclick={dismissSaveNotice}><X size={17} /></button></div>{/if}</div>
 
 <div class="visually-hidden" aria-live="polite" aria-atomic="true">{clipboardNotice}</div>
 

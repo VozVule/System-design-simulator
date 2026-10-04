@@ -63,33 +63,31 @@ test('Shift selection toggles items and V does not interfere with text, paste or
   await expect(page.getByRole('button', { name: 'Drag mode', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('successful Save shows a timed notice, identifies unsaved later edits, and can be dismissed', async ({ page }) => {
+test('Save stays green until an edit and preserves edits made during a pending Save', async ({ page }) => {
   await page.goto('/?test-store'); await page.clock.install();
-  const notice = page.locator('.save-notification'), button = page.getByRole('button', { name: 'Save', exact: true });
+  const button = page.getByRole('button', { name: 'Save', exact: true });
   await page.getByLabel('Architecture name').fill('Captured');
   await page.evaluate(() => window.__studioTest?.holdNextSave()); await button.click();
-  await expect(button).toHaveAttribute('aria-busy', 'true'); await expect(button).toContainText('Saving…'); await expect(notice).toHaveCount(0);
+  await expect(button).toHaveAttribute('aria-busy', 'true'); await expect(button).toContainText('Saving…');
   await page.getByLabel('Architecture name').fill('Later changes'); await page.evaluate(() => window.__studioTest?.releaseSave());
-  await expect(notice).toContainText('Saved “Captured”. Newer changes are still unsaved.');
   await expect(page.locator('.save-state')).toHaveText('Unsaved changes'); await expect(button).toBeEnabled();
-  await button.click(); await expect(notice).toContainText('Saved “Later changes”.');
-  await expect(button).toContainText('Saved'); await expect(button).toBeDisabled(); await expect(button).toHaveAttribute('aria-busy', 'false');
-  await page.clock.fastForward(4000);
-  await page.getByLabel('Architecture name').fill('Saved again'); await button.click();
-  await expect(notice).toContainText('Saved “Saved again”.');
-  await page.clock.fastForward(1500); await expect(notice).toBeVisible();
-  await page.clock.fastForward(3501); await expect(notice).toHaveCount(0);
-  await page.getByLabel('Architecture name').fill('Dismissed'); await button.click();
-  await expect(notice).toBeVisible(); await page.getByRole('button', { name: 'Dismiss save notification', exact: true }).click(); await expect(notice).toHaveCount(0);
+  await expect(button).not.toHaveClass(/save-complete/);
+  await button.click(); await expect(button).toContainText('Saved'); await expect(button).toHaveClass(/save-complete/);
+  await expect(button).toBeDisabled(); await expect(button).toHaveAttribute('aria-busy', 'false');
+  await page.clock.fastForward(60_000); await expect(button).toHaveClass(/save-complete/);
+  await page.getByRole('button', { name: 'Select mode', exact: true }).click(); await expect(button).toHaveClass(/save-complete/);
+  await expect(page.locator('.save-notification')).toHaveCount(0);
+  await page.getByLabel('Architecture name').fill('Edited again'); await expect(button).toBeEnabled();
+  await expect(button).toContainText('Save'); await expect(button).not.toHaveClass(/save-complete/);
 });
 
-test('a failed Save shows no success notice and retry confirms persistence', async ({ page }) => {
-  await page.goto('/?test-store'); await page.getByLabel('Architecture name').fill('Retry notice');
+test('a failed Save has no green success state and a retry confirms persistence', async ({ page }) => {
+  await page.goto('/?test-store'); await page.getByLabel('Architecture name').fill('Retry');
   await page.evaluate(() => { const set = Storage.prototype.setItem; window.__failStorage = true; Storage.prototype.setItem = function (key, value) { if (window.__failStorage) throw new DOMException('Quota exceeded', 'QuotaExceededError'); set.call(this, key, value); }; });
   await page.getByRole('button', { name: 'Save', exact: true }).click(); await expect(page.locator('.save-state')).toHaveText('Save failed');
-  await expect(page.locator('.save-notification')).toHaveCount(0);
+  await expect(page.locator('.save-complete')).toHaveCount(0);
   await page.evaluate(() => window.__failStorage = false); await page.getByRole('button', { name: 'Retry Save', exact: true }).first().click();
-  await expect(page.locator('.save-notification')).toContainText('Saved “Retry notice”.');
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveClass(/save-complete/);
 });
 
 test('zoom buttons change an empty canvas and respect both zoom limits', async ({ page }) => {
