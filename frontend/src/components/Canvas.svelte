@@ -41,6 +41,11 @@
     await tick();
     if (nodes.length) { await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); await flow.fitView({ padding: 0.2, maxZoom: 1, duration: 180 }); }
   }
+  function zoom(direction: 1 | -1): void {
+    // These helpers read the live viewport after Flow initialization. The
+    // library's zoomIn/zoomOut shortcuts can capture the initial no-op store.
+    void flow.setZoom(Math.max(0.2, Math.min(2, flow.getZoom() * 1.2 ** direction)));
+  }
   export function pastePosition(origin: { x: number; y: number }, count: number): { x: number; y: number } {
     const bounds = element.getBoundingClientRect(), position = { x: origin.x + count * 32, y: origin.y + count * 32 };
     const available = (point: { x: number; y: number }): boolean => {
@@ -110,6 +115,6 @@
   </SvelteFlow>
   <div class="canvas-tag"><span class="live-dot"></span>Architecture workspace</div>
   {#if !document.nodes.length}<div class="canvas-empty"><div class="empty-diagram"><span></span><i></i><span></span><i></i><span></span></div><h1>Build something that connects.</h1><p>Drag a component onto the canvas,<br />or add one from the palette to get started.</p><span class="empty-hint"><MousePointer2 size={14} /> Your architecture starts here</span></div>{/if}
-  <div class="canvas-tools"><button aria-label="Drag mode" title="Drag mode (V)" aria-pressed={!selectMode} onclick={() => onmodechange(false)} disabled={locked}><Hand size={18} /></button><button aria-label="Select mode" title="Select mode (V)" aria-pressed={selectMode} onclick={() => onmodechange(true)} disabled={locked}><MousePointer2 size={18} /></button><span></span><button aria-label="Zoom out" onclick={() => flow.zoomOut()}><ZoomOut size={18} /></button><button aria-label="Zoom in" onclick={() => flow.zoomIn()}><ZoomIn size={18} /></button><span></span><button aria-label="Fit diagram" onclick={fit}><Maximize2 size={17} /></button></div>
+  <div class="canvas-tools"><button aria-label="Drag mode" title="Drag mode (V)" aria-pressed={!selectMode} onclick={() => onmodechange(false)} disabled={locked}><Hand size={18} /></button><button aria-label="Select mode" title="Select mode (V)" aria-pressed={selectMode} onclick={() => onmodechange(true)} disabled={locked}><MousePointer2 size={18} /></button><span></span><button aria-label="Zoom out" onclick={() => zoom(-1)}><ZoomOut size={18} /></button><button aria-label="Zoom in" onclick={() => zoom(1)}><ZoomIn size={18} /></button><span></span><button aria-label="Fit diagram" onclick={fit}><Maximize2 size={17} /></button></div>
   <div class="canvas-footnote">{selectMode ? 'Drag to select · Shift+click to add' : 'Drag to pan'} · V to switch · Delete to remove</div>
 </div>

@@ -91,3 +91,29 @@ test('a failed Save shows no success notice and retry confirms persistence', asy
   await page.evaluate(() => window.__failStorage = false); await page.getByRole('button', { name: 'Retry Save', exact: true }).first().click();
   await expect(page.locator('.save-notification')).toContainText('Saved “Retry notice”.');
 });
+
+test('zoom buttons change an empty canvas and respect both zoom limits', async ({ page }) => {
+  await page.goto('/?test-store');
+  const zoom = () => page.locator('.svelte-flow__viewport').evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a);
+  await expect.poll(zoom).toBeCloseTo(1);
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click(); await expect.poll(zoom).toBeCloseTo(1.2);
+  await page.getByRole('button', { name: 'Zoom out', exact: true }).click(); await expect.poll(zoom).toBeCloseTo(1);
+  for (let count = 0; count < 6; count++) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await expect.poll(zoom).toBeCloseTo(2);
+  for (let count = 0; count < 16; count++) await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+  await expect.poll(zoom).toBeCloseTo(0.2);
+  await expect(page.getByRole('group', { name: / component$/ })).toHaveCount(0); await expect(page.locator('.save-state')).toHaveText('New architecture');
+});
+
+test('zoom and fit work after reopening and resizing without changing the saved diagram', async ({ page }) => {
+  await openGraph(page); const before = await savedGraph(page);
+  const zoom = () => page.locator('.svelte-flow__viewport').evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a);
+  const initial = await zoom();
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click(); await expect.poll(zoom).toBeCloseTo(initial * 1.2);
+  await page.getByRole('button', { name: 'Zoom out', exact: true }).click(); await expect.poll(zoom).toBeCloseTo(initial);
+  await page.setViewportSize({ width: 1000, height: 750 });
+  await page.getByRole('button', { name: 'Zoom out', exact: true }).click(); await expect.poll(zoom).toBeLessThan(initial);
+  await page.getByRole('button', { name: 'Fit diagram', exact: true }).click(); await page.waitForTimeout(250);
+  for (const label of ['A', 'B', 'C']) await expect(page.getByRole('group', { name: label + ' component', exact: true })).toBeInViewport();
+  await expect(page.locator('.save-state')).toHaveText('Saved'); expect(await savedGraph(page)).toEqual(before);
+});
