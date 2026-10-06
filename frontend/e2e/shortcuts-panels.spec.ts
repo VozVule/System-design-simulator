@@ -1,3 +1,5 @@
+import { ComponentType } from '../src/lib/domain/component-types';
+import { RoutingPolicy } from '../src/lib/domain/routing-policies';
 import { test, expect, type Page } from '@playwright/test';
 import type { Architecture } from '../src/lib/domain';
 import { newComponent } from '../src/lib/domain';
@@ -30,10 +32,10 @@ test('native copy/paste shortcuts duplicate server configuration with new IDs an
 });
 
 test('copied components stay usable across New and pasted edits survive an earlier pending Save', async ({ page }) => {
-  await page.getByRole('button', { name: 'Add Gateway', exact: true }).click(); await page.getByLabel('Routing policy').selectOption('weighted'); await save(page);
+  await page.getByRole('button', { name: 'Add Gateway', exact: true }).click(); await page.getByLabel('Routing policy').selectOption(RoutingPolicy.WEIGHTED); await save(page);
   await page.getByRole('group', { name: 'Gateway component', exact: true }).click(); await page.keyboard.press('ControlOrMeta+c');
   await page.getByRole('button', { name: 'New', exact: true }).click(); await page.keyboard.press('ControlOrMeta+v');
-  await expect(page.getByLabel('Routing policy')).toHaveValue('weighted'); await page.keyboard.press('ControlOrMeta+v'); await expect(page.getByRole('group', { name: / component$/ })).toHaveCount(2);
+  await expect(page.getByLabel('Routing policy')).toHaveValue(RoutingPolicy.WEIGHTED); await page.keyboard.press('ControlOrMeta+v'); await expect(page.getByRole('group', { name: / component$/ })).toHaveCount(2);
   await page.getByLabel('Architecture name').fill('Pasted document'); await page.evaluate(() => window.__studioTest?.holdNextSave()); await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.keyboard.press('ControlOrMeta+v'); await expect(page.getByRole('group', { name: / component$/ })).toHaveCount(3); await page.evaluate(() => window.__studioTest?.releaseSave());
   await expect(page.locator('.save-state')).toHaveText('Unsaved changes'); await save(page);
@@ -105,9 +107,9 @@ test('viewport changes clamp panel widths without hiding controls or overflowing
 });
 
 function groupResource(): Architecture {
-  const router = newComponent('load_balancer', { x: 0, y: 0 }, 'router');
-  if (router.type === 'load_balancer') { router.routing_policy = 'weighted'; router.capacity_rps = 320; }
-  const nodes = [router, newComponent('server', { x: 250, y: 0 }, 'app'), newComponent('database', { x: 500, y: 0 }, 'data'), newComponent('database', { x: 0, y: 250 }, 'external')];
+  const router = newComponent(ComponentType.LOAD_BALANCER, { x: 0, y: 0 }, 'router');
+  if (router.type === ComponentType.LOAD_BALANCER) { router.routing_policy = RoutingPolicy.WEIGHTED; router.capacity_rps = 320; }
+  const nodes = [router, newComponent(ComponentType.SERVER, { x: 250, y: 0 }, 'app'), newComponent(ComponentType.DATABASE, { x: 500, y: 0 }, 'data'), newComponent(ComponentType.DATABASE, { x: 0, y: 250 }, 'external')];
   nodes[0].label = 'Router'; nodes[1].label = 'App'; nodes[2].label = 'Data'; nodes[3].label = 'External';
   return { id: crypto.randomUUID(), name: 'Group clipboard', created_at: '2026-10-04T07:00:00Z', updated_at: '2026-10-04T07:00:00Z', document: { format_version: 1, nodes, edges: [
     { id: 'internal', source: 'router', target: 'app', order: 3, weight: 1.5 },
@@ -132,7 +134,7 @@ function expectPastedGroup(original: Architecture['document'], pasted: Architect
     expect(node.position.y - pasted.nodes[0].position.y).toBeCloseTo(originals[index].position.y - originals[0].position.y);
     expect(node.capacity_rps).toBe(originals[index].capacity_rps);
   }
-  expect(pasted.nodes[0]).toMatchObject({ routing_policy: 'weighted' });
+  expect(pasted.nodes[0]).toMatchObject({ routing_policy: RoutingPolicy.WEIGHTED });
   expect(pasted.edges).toEqual([
     { id: expect.any(String), source: pasted.nodes[0].id, target: pasted.nodes[1].id, order: 3, weight: 1.5 },
     { id: expect.any(String), source: pasted.nodes[1].id, target: pasted.nodes[2].id, order: 0, weight: 1 },

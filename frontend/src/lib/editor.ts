@@ -1,3 +1,4 @@
+import { ComponentType } from './domain/component-types';
 import { ArchitectureError, clone, equal, validateWrite } from './domain';
 import type { Architecture, ArchitectureWrite, ErrorDetail } from './domain';
 
@@ -38,8 +39,8 @@ export function editField(state: EditorState, key: string, text: string): Editor
     const node = next.write.document.nodes.find((n) => n.id === identifier);
     if (node) {
       if (field === 'x' || field === 'y') node.position[field] = value;
-      else if (field === 'capacity_rps' && node.type !== 'caller_group') node.capacity_rps = value;
-      else if (node.type === 'caller_group' && (field === 'caller_count' || field === 'test_rps')) node[field] = value;
+      else if (field === 'capacity_rps' && node.type !== ComponentType.CALLER_GROUP) node.capacity_rps = value;
+      else if (node.type === ComponentType.CALLER_GROUP && (field === 'caller_count' || field === 'test_rps')) node[field] = value;
     }
   } else if (collection === 'edge' && field === 'weight') {
     const edge = next.write.document.edges.find((e) => e.id === identifier); if (edge) edge.weight = value;

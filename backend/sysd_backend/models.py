@@ -5,6 +5,9 @@ from uuid import UUID
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 from pydantic_core import PydanticCustomError
 
+from sysd_backend.domain.component_types import ComponentType
+from sysd_backend.domain.routing_policies import RoutingPolicyValue
+
 
 MAX_INTEGER = 9_007_199_254_740_991
 
@@ -21,7 +24,6 @@ ElementId = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-
 NonblankString = Annotated[str, Field(min_length=1, max_length=120, pattern=r"\S"), AfterValidator(require_nonblank)]
 FiniteNumber = Annotated[float, Field(strict=True, allow_inf_nan=False, json_schema_extra={"x-finite": True})]
 RelativeWeight = Annotated[FiniteNumber, Field(ge=0)]
-RoutingPolicy: TypeAlias = Literal["round_robin", "weighted"]
 
 
 def normalize_name(value: str) -> str:
@@ -65,31 +67,31 @@ class BaseComponent(StrictModel):
 
 
 class CallerGroup(BaseComponent):
-    type: Literal["caller_group"]
+    type: Literal[ComponentType.CALLER_GROUP]
     capacity_rps: None
     caller_count: PositiveInteger
     test_rps: NonnegativeInteger
 
 
 class LoadBalancer(BaseComponent):
-    type: Literal["load_balancer"]
+    type: Literal[ComponentType.LOAD_BALANCER]
     capacity_rps: PositiveInteger
-    routing_policy: RoutingPolicy
+    routing_policy: RoutingPolicyValue
 
 
 class Gateway(BaseComponent):
-    type: Literal["gateway"]
+    type: Literal[ComponentType.GATEWAY]
     capacity_rps: PositiveInteger
-    routing_policy: RoutingPolicy
+    routing_policy: RoutingPolicyValue
 
 
 class Server(BaseComponent):
-    type: Literal["server"]
+    type: Literal[ComponentType.SERVER]
     capacity_rps: PositiveInteger
 
 
 class Database(BaseComponent):
-    type: Literal["database"]
+    type: Literal[ComponentType.DATABASE]
     capacity_rps: PositiveInteger
 
 

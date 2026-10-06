@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
 
+from sysd_backend.domain.component_types import ComponentType, ROUTER_COMPONENT_TYPES
+from sysd_backend.domain.routing_policies import RoutingPolicy
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,14 +40,14 @@ def empty_payload(name: str = "Untitled") -> dict[str, object]:
     return {"name": name, "document": {"format_version": 1, "nodes": [], "edges": []}}
 
 
-def graph_payload(nodes: list[tuple[str, str]], edges: list[tuple[str, str, int]]) -> dict[str, object]:
+def graph_payload(nodes: list[tuple[str, ComponentType]], edges: list[tuple[str, str, int]]) -> dict[str, object]:
     components: list[dict[str, object]] = []
     for node_id, kind in nodes:
         node: dict[str, object] = {"id": node_id, "type": kind, "label": node_id, "position": {"x": 0, "y": 0}, "capacity_rps": 10}
-        if kind == "caller_group":
+        if kind == ComponentType.CALLER_GROUP:
             node.update(capacity_rps=None, caller_count=1, test_rps=0)
-        if kind in ("load_balancer", "gateway"):
-            node["routing_policy"] = "weighted"
+        if kind in ROUTER_COMPONENT_TYPES:
+            node["routing_policy"] = RoutingPolicy.WEIGHTED
         components.append(node)
     connections = [{"id": f"edge_{index}", "source": source, "target": target, "order": order, "weight": 0} for index, (source, target, order) in enumerate(edges)]
     return {"format_version": 1, "nodes": components, "edges": connections}

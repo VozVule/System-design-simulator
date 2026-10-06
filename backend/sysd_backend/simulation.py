@@ -3,8 +3,13 @@
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import TypeAlias
 
+from sysd_backend.domain.component_types import (
+    ComponentType, DESTINATION_REQUIRED_COMPONENT_TYPES, ROUTER_COMPONENT_TYPES,
+)
+from sysd_backend.domain.routing_policies import RoutingPolicy
+from sysd_backend.domain.traffic_phases import TrafficPhase
 from sysd_backend.errors import SimulationInvalid
 from sysd_backend.models import (
     ArchitectureDocument, CallerGroup, Connection, Database, DetailCode, Gateway,
@@ -21,7 +26,7 @@ from sysd_backend.validation import validate_graph
 class Cohort:
     caller_id: str
     prefix: tuple[str, ...]
-    phase: Literal["request", "response"]
+    phase: TrafficPhase
 
 
 Arrivals: TypeAlias = dict[str, dict[Cohort, int]]
@@ -44,7 +49,7 @@ def outgoing_connections(document: ArchitectureDocument) -> dict[str, tuple[Conn
 
 def validate_count_range(request: SimulationRequest) -> list[ValidationIssue]:
     planned_generated = request.total_ticks * sum(
-        node.test_rps for node in request.document.nodes if node.type == "caller_group"
+        node.test_rps for node in request.document.nodes if node.type == ComponentType.CALLER_GROUP
     )
     if planned_generated > MAX_INTEGER:
         return [ValidationIssue(
@@ -65,16 +70,16 @@ def validate_simulation(request: SimulationRequest) -> list[ValidationIssue]:
     def report(path: str, code: DetailCode, message: str) -> None:
         issues.append(ValidationIssue(path=path, code=code, message=message))
 
-    callers = [node.id for node in document.nodes if node.type == "caller_group"]
+    callers = [node.id for node in document.nodes if node.type == ComponentType.CALLER_GROUP]
     if not callers:
         report("/document/nodes", "missing_source", "Add at least one Caller Group.")
     outgoing = outgoing_connections(document)
     for index, node in enumerate(document.nodes):
         path = f"/document/nodes/{index}"
         destinations = outgoing[node.id]
-        if node.type in ("caller_group", "load_balancer", "gateway") and not destinations:
+        if node.type in DESTINATION_REQUIRED_COMPONENT_TYPES and not destinations:
             report(path, "missing_destination", "Connect this component to a request destination.")
-        elif node.type in ("load_balancer", "gateway") and node.routing_policy == "weighted" and not any(edge.weight > 0 for edge in destinations):
+        elif isinstance(node, (LoadBalancer, Gateway)) and node.routing_policy == RoutingPolicy.WEIGHTED and not any(edge.weight > 0 for edge in destinations):
             report(path + "/routing_policy", "all_zero_weights", "Give at least one destination a positive routing weight.")
     reachable = set(callers)
     pending = deque(callers)
@@ -126,7 +131,7 @@ def round_robin_allocation(count: int, state: RoutingState) -> list[int]:
 def empty_frame(document: ArchitectureDocument, tick: int) -> SimulationFrame:
     nodes: dict[str, NodeFrame] = {}
     for node in document.nodes:
-        nodes[node.id] = CallerFrame(generated=0, completed=0) if node.type == "caller_group" else ProcessingFrame(
+        nodes[node.id] = CallerFrame(generated=0, completed=0) if node.type == ComponentType.CALLER_GROUP else ProcessingFrame(
             received=0, handled=0, dropped=0, responses_received=0, responses_returned=0,
         )
     return SimulationFrame(
@@ -146,14 +151,14 @@ def merge_arrival(arrivals: Arrivals, receiving_id: str, cohort: Cohort, count: 
 def forward(edge: Connection, cohort: Cohort, count: int, arrivals: Arrivals, frame: SimulationFrame) -> None:
     if count:
         frame.edges[edge.id].forwarded += count
-        merge_arrival(arrivals, edge.target, Cohort(cohort.caller_id, cohort.prefix + (edge.id,), "request"), count)
+        merge_arrival(arrivals, edge.target, Cohort(cohort.caller_id, cohort.prefix + (edge.id,), TrafficPhase.REQUEST), count)
 
 
 def respond(cohort: Cohort, count: int, edges: dict[str, Connection], arrivals: Arrivals, frame: SimulationFrame) -> None:
     if count:
         edge = edges[cohort.prefix[-1]]
         frame.edges[edge.id].returned += count
-        merge_arrival(arrivals, edge.source, Cohort(cohort.caller_id, cohort.prefix[:-1], "response"), count)
+        merge_arrival(arrivals, edge.source, Cohort(cohort.caller_id, cohort.prefix[:-1], TrafficPhase.RESPONSE), count)
 
 
 def process_caller_traffic(
@@ -164,8 +169,8 @@ def process_caller_traffic(
     metrics = frame.nodes[caller.id]
     assert isinstance(metrics, CallerFrame)
     metrics.generated = caller.test_rps
-    metrics.completed = sum(count for cohort, count in arrivals.items() if cohort.phase == "response")
-    forward(destination, Cohort(caller.id, (), "request"), caller.test_rps, following, frame)
+    metrics.completed = sum(count for cohort, count in arrivals.items() if cohort.phase == TrafficPhase.RESPONSE)
+    forward(destination, Cohort(caller.id, (), TrafficPhase.REQUEST), caller.test_rps, following, frame)
     frame.counts.generated += metrics.generated
     frame.counts.completed += metrics.completed
 
@@ -177,13 +182,13 @@ def process_incoming_requests(
     """Apply shared request capacity, then schedule accepted traffic's next hop."""
     metrics = frame.nodes[node.id]
     assert isinstance(metrics, ProcessingFrame)
-    requests = sorted((cohort, count) for cohort, count in arrivals.items() if cohort.phase == "request")
+    requests = sorted((cohort, count) for cohort, count in arrivals.items() if cohort.phase == TrafficPhase.REQUEST)
     metrics.received = sum(count for _, count in requests)
     metrics.handled = min(metrics.received, node.capacity_rps)
     metrics.dropped = metrics.received - metrics.handled
     frame.counts.dropped += metrics.dropped
     accepted = proportional_allocation(metrics.handled, [count for _, count in requests])
-    weighted = node.type in ("load_balancer", "gateway") and node.routing_policy == "weighted"
+    weighted = isinstance(node, (LoadBalancer, Gateway)) and node.routing_policy == RoutingPolicy.WEIGHTED
     # Destination quotas apply to the node's complete accepted count.
     remaining_quotas = proportional_allocation(metrics.handled, state.weights) if state is not None and weighted else []
     for (cohort, _), count in zip(requests, accepted, strict=True):
@@ -211,7 +216,7 @@ def return_incoming_responses(
     """Return incoming replies along their saved paths without a capacity charge."""
     metrics = frame.nodes[node_id]
     assert isinstance(metrics, ProcessingFrame)
-    replies = [(cohort, count) for cohort, count in arrivals.items() if cohort.phase == "response"]
+    replies = [(cohort, count) for cohort, count in arrivals.items() if cohort.phase == TrafficPhase.RESPONSE]
     metrics.responses_received = sum(count for _, count in replies)
     metrics.responses_returned += metrics.responses_received
     for cohort, count in replies:
@@ -240,7 +245,7 @@ def simulate(request: SimulationRequest) -> SimulationResult:
     edges = {edge.id: edge for edge in document.edges}
     routing = {
         node.id: RoutingState(outgoing[node.id], exact_weights(outgoing[node.id]))
-        for node in document.nodes if node.type in ("load_balancer", "gateway")
+        for node in document.nodes if node.type in ROUTER_COMPONENT_TYPES
     }
     current: Arrivals = {}
     frames = [empty_frame(document, 0)]
@@ -249,7 +254,7 @@ def simulate(request: SimulationRequest) -> SimulationResult:
         frame = empty_frame(document, tick)
         for node in document.nodes:
             arrivals = current.get(node.id, {})
-            if node.type == "caller_group":
+            if node.type == ComponentType.CALLER_GROUP:
                 process_caller_traffic(node, arrivals, outgoing[node.id][0], following, frame)
             else:
                 process_incoming_requests(node, arrivals, outgoing[node.id], routing.get(node.id), edges, following, frame)

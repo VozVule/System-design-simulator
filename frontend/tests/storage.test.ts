@@ -1,3 +1,4 @@
+import { ComponentType } from '../src/lib/domain/component-types';
 import { describe, expect, it } from 'vitest';
 import { BrowserArchitectureStore, storageKey } from '../src/lib/storage';
 import { newEditor } from '../src/lib/editor';
@@ -15,7 +16,7 @@ describe('placeholder library contract', () => {
   });
   it('replaces complete documents and allows identical names', async () => {
     const port = memory(), store = new BrowserArchitectureStore(() => port); const write = newEditor().write;
-    write.document.nodes.push(newComponent('server', { x: -20.5, y: 3 }, 'node'));
+    write.document.nodes.push(newComponent(ComponentType.SERVER, { x: -20.5, y: 3 }, 'node'));
     const first = await store.create(write), second = await store.create(write);
     expect(first.id).not.toBe(second.id); expect(await store.list()).toHaveLength(2);
     const replaced = await store.replace(first.id, newEditor().write); expect(replaced.document.nodes).toEqual([]);

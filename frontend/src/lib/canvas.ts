@@ -1,3 +1,4 @@
+import { ComponentType, SINGLE_DESTINATION_COMPONENT_TYPES } from './domain/component-types';
 import type { Edge, Node } from '@xyflow/svelte';
 import type { ArchitectureDocument, Component } from './domain';
 import type { NodeMetrics, SimulationFrame } from './simulation';
@@ -5,7 +6,7 @@ export type CanvasNode = Node<{ component: Component; outputAvailable: boolean; 
 export function canvasNodes(doc: ArchitectureDocument, selected: readonly string[], frame?: SimulationFrame): CanvasNode[] {
   return doc.nodes.map((component) => ({
     id: component.id, type: 'component', position: { ...component.position },
-    data: { component, outputAvailable: component.type !== 'database' && (!(component.type === 'caller_group' || component.type === 'server') || !doc.edges.some((e) => e.source === component.id)), ...(frame ? { metrics: frame.nodes[component.id] } : {}) },
+    data: { component, outputAvailable: component.type !== ComponentType.DATABASE && (!SINGLE_DESTINATION_COMPONENT_TYPES.has(component.type) || !doc.edges.some((e) => e.source === component.id)), ...(frame ? { metrics: frame.nodes[component.id] } : {}) },
     selected: selected.includes(component.id), ariaLabel: `${component.label} component`,
   }));
 }

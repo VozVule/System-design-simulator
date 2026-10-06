@@ -12,6 +12,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
+from sysd_backend.domain.component_types import COMPONENT_TYPES
 from sysd_backend.errors import ArchitectureNotFound, BackendError, DocumentInvalid, SimulationInvalid, StorageUnavailable
 from sysd_backend.models import ApiError, Architecture, ArchitectureList, ArchitectureWrite, DetailCode, ErrorCode, ErrorDetail, ErrorResponse
 from sysd_backend.service import ArchitectureService
@@ -22,7 +23,6 @@ from sysd_backend.simulation_models import SimulationRequest, SimulationResult
 
 
 logger = logging.getLogger(__name__)
-COMPONENT_TAGS = {"caller_group", "load_balancer", "gateway", "server", "database"}
 
 
 def error_response(status: int, code: ErrorCode, message: str, details: list[ErrorDetail] | None = None) -> JSONResponse:
@@ -99,7 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             location: Literal["body", "path"] = "path" if issue.loc and issue.loc[0] == "path" else "body"
             segments = issue.loc[1:]
             # A discriminated node union adds its tag after the node array index.
-            if len(segments) >= 4 and segments[:2] == ["document", "nodes"] and isinstance(segments[2], int) and segments[3] in COMPONENT_TAGS:
+            if len(segments) >= 4 and segments[:2] == ["document", "nodes"] and isinstance(segments[2], int) and segments[3] in COMPONENT_TYPES:
                 segments = segments[:3] + segments[4:]
             parts = [str(part).replace("~", "~0").replace("/", "~1") for part in segments]
             details.append(ErrorDetail(location=location, path="" if not parts else "/" + "/".join(parts), code=detail_code(issue.type), message=issue.msg))

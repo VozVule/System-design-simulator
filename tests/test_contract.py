@@ -79,6 +79,8 @@ def test_generated_request_schema_has_same_public_shape_and_constraints(tmp_path
     document_schema = resolve(served, as_object(as_object(schema["properties"])["document"]))
     node_schema = as_object(as_object(document_schema["properties"])["nodes"])
     union = as_object(node_schema["items"])
+    approved_union = as_object(approved_nodes["Component"])
+    assert union["discriminator"] == approved_union["discriminator"]
     for variant in as_array(union["oneOf"]):
         resolved = resolve(served, as_object(variant))
         title = resolved["title"]
@@ -86,6 +88,14 @@ def test_generated_request_schema_has_same_public_shape_and_constraints(tmp_path
         approved_variant = as_object(approved_nodes[title])
         assert resolved["additionalProperties"] is False
         assert set(as_array(resolved["required"])) == set(as_array(approved_variant["required"]))
+        actual_properties = as_object(resolved["properties"])
+        expected_properties = as_object(approved_variant["properties"])
+        assert as_object(actual_properties["type"])["const"] == as_object(expected_properties["type"])["const"]
+        if "routing_policy" in expected_properties:
+            actual_policy = resolve(served, as_object(actual_properties["routing_policy"]))
+            expected_policy = resolve(approved, as_object(expected_properties["routing_policy"]))
+            assert actual_policy["type"] == expected_policy["type"] == "string"
+            assert as_array(actual_policy["enum"]) == as_array(expected_policy["enum"])
 
 
 def test_both_openapi_documents_pass_full_validation(tmp_path: Path) -> None:

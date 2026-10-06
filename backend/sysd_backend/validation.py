@@ -1,5 +1,6 @@
 from collections import deque
 
+from sysd_backend.domain.component_types import ComponentType, SINGLE_DESTINATION_COMPONENT_TYPES
 from sysd_backend.models import ArchitectureDocument, DetailCode, ValidationIssue
 
 
@@ -47,11 +48,11 @@ def validate_graph(document: ArchitectureDocument) -> list[ValidationIssue]:
             report(path, "self_connection", "A component cannot connect to itself.")
     for index, node in enumerate(document.nodes):
         path = f"/nodes/{index}"
-        if node.type == "caller_group" and incoming[node.id]:
+        if node.type == ComponentType.CALLER_GROUP and incoming[node.id]:
             report(path, "forbidden_incoming", "Caller Groups cannot have incoming connections.")
-        if node.type in ("caller_group", "server") and outgoing[node.id] > 1:
+        if node.type in SINGLE_DESTINATION_COMPONENT_TYPES and outgoing[node.id] > 1:
             report(path, "too_many_outgoing", "This component allows at most one outgoing connection.")
-        if node.type == "database" and outgoing[node.id]:
+        if node.type == ComponentType.DATABASE and outgoing[node.id]:
             report(path, "forbidden_outgoing", "Databases cannot have outgoing connections.")
     remaining_incoming = incoming.copy()
     ready = deque(node_id for node_id, count in incoming.items() if count == 0)

@@ -1,3 +1,5 @@
+import { CapacityStatus } from '../src/lib/domain/capacity-statuses';
+import { ComponentType } from '../src/lib/domain/component-types';
 import { describe, expect, it, vi } from 'vitest';
 import { ArchitectureError, clone, equal } from '../src/lib/domain';
 import type { ArchitectureDocument, ErrorDetail } from '../src/lib/domain';
@@ -8,8 +10,8 @@ import { PlaybackClock } from '../src/lib/playback';
 const document: ArchitectureDocument = {
   format_version: 1,
   nodes: [
-    { id: 'caller', type: 'caller_group', label: 'Same label', position: { x: 0, y: 0 }, capacity_rps: null, caller_count: 10, test_rps: 100 },
-    { id: 'server', type: 'server', label: 'Same label', position: { x: 250, y: 0 }, capacity_rps: 60 },
+    { id: 'caller', type: ComponentType.CALLER_GROUP, label: 'Same label', position: { x: 0, y: 0 }, capacity_rps: null, caller_count: 10, test_rps: 100 },
+    { id: 'server', type: ComponentType.SERVER, label: 'Same label', position: { x: 250, y: 0 }, capacity_rps: 60 },
   ],
   edges: [{ id: 'edge', source: 'caller', target: 'server', order: 0, weight: 1 }],
 };
@@ -78,9 +80,9 @@ describe('complete simulation result boundary', () => {
 
 describe('presentation state', () => {
   it('uses exact thresholds with large safe counts; response work cannot affect capacity', () => {
-    expect(capacityStatus(79, 100)).toBe('normal'); expect(capacityStatus(80, 100)).toBe('near'); expect(capacityStatus(99, 100)).toBe('near'); expect(capacityStatus(100, 100)).toBe('full');
+    expect(capacityStatus(79, 100)).toBe(CapacityStatus.NORMAL); expect(capacityStatus(80, 100)).toBe(CapacityStatus.NEAR); expect(capacityStatus(99, 100)).toBe(CapacityStatus.NEAR); expect(capacityStatus(100, 100)).toBe(CapacityStatus.FULL);
     const capacity = 9_007_199_254_740_989, boundary = 7_205_759_403_792_791;
-    expect(capacityStatus(boundary, capacity)).toBe('normal'); expect(capacityStatus(boundary + 1, capacity)).toBe('near');
+    expect(capacityStatus(boundary, capacity)).toBe(CapacityStatus.NORMAL); expect(capacityStatus(boundary + 1, capacity)).toBe(CapacityStatus.NEAR);
     expect(capacityLabel(capacityStatus(60, 60))).toBe('At capacity');
   });
   it('keeps run length safe and independent of document/name state', () => {

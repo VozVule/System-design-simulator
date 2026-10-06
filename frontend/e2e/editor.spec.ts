@@ -1,3 +1,4 @@
+import { RoutingPolicy } from '../src/lib/domain/routing-policies';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { Architecture } from '../src/lib/domain';
@@ -57,10 +58,10 @@ test('retains fractional and zero weights, policy changes and explicit destinati
   await page.getByLabel('Architecture name').fill('Weighted');
   await add(page, 'Load Balancer', 'Router', 0, 0); await add(page, 'Server', 'One', 250, -30); await add(page, 'Server', 'Two', 250, 150);
   await connectNodes(page, 'Router', 'One'); await connectNodes(page, 'Router', 'Two');
-  await page.getByLabel('Routing policy').selectOption('weighted'); await page.getByLabel('Weight for One', { exact: true }).fill('1.5'); await page.getByLabel('Weight for Two', { exact: true }).fill('0');
+  await page.getByLabel('Routing policy').selectOption(RoutingPolicy.WEIGHTED); await page.getByLabel('Weight for One', { exact: true }).fill('1.5'); await page.getByLabel('Weight for Two', { exact: true }).fill('0');
   await page.getByRole('button', { name: 'Move up destination 2', exact: true }).click();
-  await page.getByLabel('Routing policy').selectOption('round_robin'); await expect(page.getByLabel('Weight for One')).toHaveCount(0);
-  await page.getByLabel('Routing policy').selectOption('weighted'); await expect(page.getByLabel('Weight for One')).toHaveValue('1.5'); await save(page);
+  await page.getByLabel('Routing policy').selectOption(RoutingPolicy.ROUND_ROBIN); await expect(page.getByLabel('Weight for One')).toHaveCount(0);
+  await page.getByLabel('Routing policy').selectOption(RoutingPolicy.WEIGHTED); await expect(page.getByLabel('Weight for One')).toHaveValue('1.5'); await save(page);
   const edges = (await savedItems(page))[0].document.edges; expect(edges.map((e) => e.weight)).toEqual([1.5, 0]); expect(edges.map((e) => e.order)).toEqual([1, 0]);
   await page.reload(); await reopen(page, 'Weighted'); await select(page, 'Router'); await expect(page.getByLabel('Weight for Two')).toHaveValue('0'); await expect(page.getByLabel('Weight for One')).toHaveValue('1.5');
   await page.getByLabel('Weight for One').fill('0'); await expect(page.getByText('All weights are zero.', { exact: false })).toBeVisible(); await save(page);

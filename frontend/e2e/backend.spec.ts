@@ -1,3 +1,4 @@
+import { ComponentType } from '../src/lib/domain/component-types';
 import { test, expect, type Page, type Response } from '@playwright/test';
 import { moveComponentTo } from './canvas-helpers';
 import type { Architecture } from '../src/lib/domain';
@@ -84,5 +85,5 @@ test('Save and continue creates a new document, then updates the same resource b
   await expect(page.locator('.save-state')).toHaveText('New architecture'); await open(page, created);
   await page.getByRole('button', { name: 'Add Database', exact: true }).click(); await page.getByRole('button', { name: 'New', exact: true }).click();
   response = page.waitForResponse(mutation('PUT')); await page.getByRole('button', { name: 'Save and continue', exact: true }).click(); const updated = await (await response).json() as Architecture;
-  expect(updated.id).toBe(created.id); expect(updated.document.nodes[0].type).toBe('database'); await expect(page.locator('.save-state')).toHaveText('New architecture');
+  expect(updated.id).toBe(created.id); expect(updated.document.nodes[0].type).toBe(ComponentType.DATABASE); await expect(page.locator('.save-state')).toHaveText('New architecture');
 });

@@ -1,10 +1,11 @@
+import { ComponentType } from '../src/lib/domain/component-types';
 import { describe, expect, it } from 'vitest';
 import contract from '../../specs/backend/backend-api.openapi.json';
 import { ArchitectureError, clone, connect, destinations, graphIssues, newComponent, removeElements, reorder, validateArchitecture, validateWrite, weightPercent } from '../src/lib/domain';
 import { canvasEdges, canvasNodes } from '../src/lib/canvas';
-import type { ArchitectureDocument, ComponentType } from '../src/lib/domain';
+import type { ArchitectureDocument } from '../src/lib/domain';
 
-const doc = (): ArchitectureDocument => ({ format_version: 1, nodes: [newComponent('caller_group', { x: -40.5, y: 10 }, 'caller'), newComponent('load_balancer', { x: 200, y: 10 }, 'lb'), newComponent('server', { x: 450, y: 10 }, 'a'), newComponent('server', { x: 450, y: 170 }, 'b'), newComponent('database', { x: 750, y: 90 }, 'db')], edges: [] });
+const doc = (): ArchitectureDocument => ({ format_version: 1, nodes: [newComponent(ComponentType.CALLER_GROUP, { x: -40.5, y: 10 }, 'caller'), newComponent(ComponentType.LOAD_BALANCER, { x: 200, y: 10 }, 'lb'), newComponent(ComponentType.SERVER, { x: 450, y: 10 }, 'a'), newComponent(ComponentType.SERVER, { x: 450, y: 170 }, 'b'), newComponent(ComponentType.DATABASE, { x: 750, y: 90 }, 'db')], edges: [] });
 const write = (document: ArchitectureDocument) => ({ name: 'Architecture', document });
 const codes = (document: ArchitectureDocument) => graphIssues(document).map((i) => i.code);
 describe('saved document contract', () => {
@@ -12,7 +13,7 @@ describe('saved document contract', () => {
     const resource = contract.paths['/api/v1/architectures'].post.responses['201'].content['application/json'].example;
     expect(validateArchitecture(resource)).toEqual(resource);
   });
-  it.each(['caller_group', 'load_balancer', 'gateway', 'server', 'database'] as ComponentType[])('creates a complete %s variant', (type) => {
+  it.each(Object.values(ComponentType))('creates a complete %s variant', (type) => {
     const component = newComponent(type, { x: -1.5, y: 3.2 }, 'node');
     expect(validateWrite(write({ format_version: 1, nodes: [component], edges: [] })).document.nodes[0]).toEqual(component);
   });
@@ -38,11 +39,11 @@ describe('saved document contract', () => {
     catch (error) { expect(error).toBeInstanceOf(ArchitectureError); expect((error as ArchitectureError).response.error.code).toBe('unsupported_document_version'); }
   });
   it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '100', true, null])('rejects invalid processing capacity %s', (capacity) => {
-    const node = newComponent('server', { x: 0, y: 0 }, 'node');
+    const node = newComponent(ComponentType.SERVER, { x: 0, y: 0 }, 'node');
     expect(() => validateWrite({ name: 'x', document: { format_version: 1, nodes: [{ ...node, capacity_rps: capacity }], edges: [] } })).toThrow();
   });
   it('accepts zero traffic and safe maximum integers, but forbids nonfinite coordinates and weights', () => {
-    const graph = doc(); const caller = graph.nodes[0]; if (caller.type === 'caller_group') { caller.test_rps = 0; caller.caller_count = Number.MAX_SAFE_INTEGER; }
+    const graph = doc(); const caller = graph.nodes[0]; if (caller.type === ComponentType.CALLER_GROUP) { caller.test_rps = 0; caller.caller_count = Number.MAX_SAFE_INTEGER; }
     expect(validateWrite(write(graph))).toBeDefined(); graph.nodes[0].position.x = Infinity;
     expect(() => validateWrite(write(graph))).toThrow();
     const weighted = connect(doc(), 'lb', 'a', 'e'); weighted.edges[0].weight = NaN;
@@ -69,7 +70,7 @@ describe('graph commands', () => {
     expect(first.edges).toHaveLength(1);
   });
   it('permits acyclic merges and multiple caller groups', () => {
-    let graph = doc(); graph.nodes.push(newComponent('caller_group', { x: 0, y: 100 }, 'second'));
+    let graph = doc(); graph.nodes.push(newComponent(ComponentType.CALLER_GROUP, { x: 0, y: 100 }, 'second'));
     for (const [source, target, id] of [['caller', 'lb', 'one'], ['second', 'lb', 'two'], ['lb', 'a', 'three'], ['lb', 'b', 'four'], ['a', 'db', 'five'], ['b', 'db', 'six']]) graph = connect(graph, source, target, id);
     expect(graphIssues(graph)).toEqual([]);
   });

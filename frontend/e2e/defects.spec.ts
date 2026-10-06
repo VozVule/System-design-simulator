@@ -1,10 +1,11 @@
+import { ComponentType } from '../src/lib/domain/component-types';
 import { test, expect, type Page } from '@playwright/test';
 import { storageKey } from '../src/lib/storage';
 import { newComponent, type Architecture } from '../src/lib/domain';
 
 async function openGraph(page: Page): Promise<void> {
   await page.goto('/?test-store');
-  const nodes = [newComponent('server', { x: 0, y: 0 }, 'a'), newComponent('server', { x: 250, y: 0 }, 'b'), newComponent('database', { x: 500, y: 0 }, 'c')];
+  const nodes = [newComponent(ComponentType.SERVER, { x: 0, y: 0 }, 'a'), newComponent(ComponentType.SERVER, { x: 250, y: 0 }, 'b'), newComponent(ComponentType.DATABASE, { x: 500, y: 0 }, 'c')];
   nodes[0].label = 'A'; nodes[1].label = 'B'; nodes[2].label = 'C';
   const resource: Architecture = { id: crypto.randomUUID(), name: 'Selection', document: { format_version: 1, nodes, edges: [{ id: 'ac', source: 'a', target: 'c', order: 0, weight: 1 }] }, created_at: '2026-10-03T12:00:00Z', updated_at: '2026-10-03T12:00:00Z' };
   await page.evaluate(({ key, resource }) => localStorage.setItem(key, JSON.stringify({ store_version: 1, items: [resource] })), { key: storageKey, resource });

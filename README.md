@@ -37,6 +37,8 @@ The library schema and payload examples are in [the backend specification](specs
 
 The accepted [backend simulation specification](specs/backend/simulation-spec.md) and [frontend replay specification](specs/frontend/simulation-replay-spec.md) define the Run API and replay behavior. Each direction advances one hop per step. A run ends at the selected step count without extra drain steps. Its totals satisfy `generated = completed + dropped + in_flight`.
 
+Backend component types and role groups, routing policies, and traffic phases are defined in `backend/sysd_backend/domain`. Use these definitions in business logic and behavior fixtures. Keep approved JSON contract values independent so contract checks can detect an unintended change to serialized identifiers. The frontend has matching component and routing definitions in `frontend/src/lib/domain`, plus its capacity display states.
+
 SQLite initializes automatically on application startup at `data/architectures.sqlite3`. The library starts empty, persists across restarts, and stores complete JSON documents plus metadata. The database and `.venv` are ignored by Git. Configure another durable database location with `SYSD_DATABASE_PATH`. Configure allowed frontend origins with the comma-separated `SYSD_CORS_ORIGINS`; defaults are `http://localhost:5173` and `http://127.0.0.1:5173`.
 
 For example:

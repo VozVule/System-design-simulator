@@ -1,3 +1,5 @@
+import { CapacityStatus } from './domain/capacity-statuses';
+import { ComponentType } from './domain/component-types';
 import { z } from 'zod';
 import { ArchitectureError, clone, documentSchema, equal, errorResponseSchema, graphIssues } from './domain';
 import type { ArchitectureDocument, ErrorDetail } from './domain';
@@ -40,7 +42,7 @@ export function decodeSimulation(input: unknown, submitted: SimulationInput): Si
     const generated: number[] = [], completed: number[] = [], dropped: number[] = [];
     for (const node of doc.nodes) {
       const metrics = current.nodes[node.id], ins = incoming(node.id), outs = outgoing(node.id);
-      if (node.type === 'caller_group') {
+      if (node.type === ComponentType.CALLER_GROUP) {
         if (!('generated' in metrics)) invalid();
         const caller = metrics as CallerMetrics;
         generated.push(caller.generated); completed.push(caller.completed);
@@ -76,10 +78,10 @@ export function decodeSimulation(input: unknown, submitted: SimulationInput): Si
   if (!equal(result.summary, result.frames.at(-1)?.totals)) invalid();
   return freeze(result);
 }
-export function capacityStatus(handled: number, capacity: number): 'normal' | 'near' | 'full' {
-  return handled === capacity ? 'full' : BigInt(handled) * 5n >= BigInt(capacity) * 4n ? 'near' : 'normal';
+export function capacityStatus(handled: number, capacity: number): CapacityStatus {
+  return handled === capacity ? CapacityStatus.FULL : BigInt(handled) * 5n >= BigInt(capacity) * 4n ? CapacityStatus.NEAR : CapacityStatus.NORMAL;
 }
-export const capacityLabel = (status: ReturnType<typeof capacityStatus>): string => ({ normal: 'Normal', near: 'Near capacity', full: 'At capacity' })[status];
+export const capacityLabel = (status: CapacityStatus): string => ({ [CapacityStatus.NORMAL]: 'Normal', [CapacityStatus.NEAR]: 'Near capacity', [CapacityStatus.FULL]: 'At capacity' })[status];
 export const capacityPercent = (handled: number, capacity: number): string => (handled / capacity * 100).toLocaleString(undefined, { maximumFractionDigits: 1 }) + '%';
 export function parseTotalSteps(text: string): number | null {
   const value = Number(text); return text.trim() && Number.isSafeInteger(value) && value > 0 ? value : null;

@@ -1,3 +1,4 @@
+import { ComponentType } from '../src/lib/domain/component-types';
 import { describe, expect, it } from 'vitest';
 import { applySaveErrors, captureSave, clearElementDrafts, discardEditor, editField, finishSave, isDirty, newEditor, openEditor } from '../src/lib/editor';
 import { newComponent } from '../src/lib/domain';
@@ -10,14 +11,14 @@ describe('working editor state', () => {
     expect(isDirty(editField(changed, 'name', initial.write.name))).toBe(false);
   });
   it('keeps invalid text and prevents saving stale valid values', () => {
-    const state = newEditor(); state.write.document.nodes.push(newComponent('server', { x: 0, y: 0 }, 'n'));
+    const state = newEditor(); state.write.document.nodes.push(newComponent(ComponentType.SERVER, { x: 0, y: 0 }, 'n'));
     const invalid = editField(state, 'node:n:capacity_rps', '');
     expect(invalid.drafts['node:n:capacity_rps']).toBe(''); expect(invalid.write.document.nodes[0].capacity_rps).toBe(100);
     expect(isDirty(invalid)).toBe(true); expect(() => captureSave(invalid)).toThrow('invalid fields');
     expect(editField(invalid, 'node:n:capacity_rps', '60').errors).toEqual({});
   });
   it.each(['0', '-1', '1.5', '9007199254740992', 'Infinity', 'NaN', ''])('rejects invalid caller count input %s', (input) => {
-    const state = newEditor(); state.write.document.nodes.push(newComponent('caller_group', { x: 0, y: 0 }, 'n'));
+    const state = newEditor(); state.write.document.nodes.push(newComponent(ComponentType.CALLER_GROUP, { x: 0, y: 0 }, 'n'));
     expect(editField(state, 'node:n:caller_count', input).errors).toHaveProperty('node:n:caller_count');
   });
   it('preserves later edits and adopts the first Save ID', () => {
@@ -45,13 +46,13 @@ describe('working editor state', () => {
     expect(clearElementDrafts(state, ['a']).errors).toEqual({ 'node:b:label': '' });
   });
   it('maps backend field pointers through the submitted node IDs after array edits', () => {
-    const state = newEditor(); state.write.document.nodes.push(newComponent('server', { x: 0, y: 0 }, 'a'), newComponent('server', { x: 10, y: 10 }, 'b'));
+    const state = newEditor(); state.write.document.nodes.push(newComponent(ComponentType.SERVER, { x: 0, y: 0 }, 'a'), newComponent(ComponentType.SERVER, { x: 10, y: 10 }, 'b'));
     const submitted = captureSave(state); state.write.document.nodes.shift();
     const next = applySaveErrors(state, submitted, [{ location: 'body', path: '/document/nodes/1/capacity_rps', code: 'invalid_value', message: 'Server rejected capacity.' }]);
     expect(next.errors).toEqual({ 'node:b:capacity_rps': 'Server rejected capacity.' }); expect(next.write).toEqual(state.write); expect(next.baseline).toEqual(state.baseline);
   });
   it('does not attach stale server errors to fields corrected during a pending Save', () => {
-    let state = newEditor(); state.write.document.nodes.push(newComponent('server', { x: 0, y: 0 }, 'a'));
+    let state = newEditor(); state.write.document.nodes.push(newComponent(ComponentType.SERVER, { x: 0, y: 0 }, 'a'));
     const submitted = captureSave(state); state = editField(state, 'node:a:capacity_rps', '200'); state = editField(state, 'name', 'Newer');
     expect(applySaveErrors(state, submitted, [
       { location: 'body', path: '/document/nodes/0/capacity_rps', code: 'invalid_value', message: 'Capacity rejected.' },

@@ -7,6 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from sysd_backend import api
+from sysd_backend.domain.component_types import ComponentType
+from sysd_backend.domain.routing_policies import RoutingPolicy
 from sysd_backend.api import create_app
 from sysd_backend.models import MAX_INTEGER
 from sysd_backend.settings import Settings
@@ -54,7 +56,7 @@ def test_run_has_no_sqlite_access_during_exclusive_library_lock(tmp_path: Path) 
 
 
 def test_failed_run_does_not_change_saved_incomplete_graph(client: TestClient) -> None:
-    document = graph_payload([("caller", "caller_group"), ("server", "server")], [])
+    document = graph_payload([("caller", ComponentType.CALLER_GROUP), ("server", ComponentType.SERVER)], [])
     saved = client.post("/api/v1/architectures", json={"name": "Incomplete", "document": document})
     assert saved.status_code == 201
     failed = assert_error(client.post("/api/v1/simulations", json={"document": document, "total_ticks": 60}), 422, "validation_error")
@@ -151,10 +153,10 @@ def test_simulation_structural_pointers_are_body_relative(client: TestClient) ->
 def test_simulation_readiness_and_count_overflow_detail_codes(client: TestClient) -> None:
     empty = assert_error(client.post("/api/v1/simulations", json={"document": {"format_version": 1, "nodes": [], "edges": []}, "total_ticks": 60}), 422, "validation_error")
     assert [(detail.path, detail.code) for detail in empty.error.details] == [("/document/nodes", "missing_source")]
-    weighted = request_for([("caller", "caller_group"), ("lb", "load_balancer"), ("server", "server")], [("caller", "lb", 0), ("lb", "server", 0)], policies={"lb": "weighted"}, weights=[1, 0])
+    weighted = request_for([("caller", ComponentType.CALLER_GROUP), ("lb", ComponentType.LOAD_BALANCER), ("server", ComponentType.SERVER)], [("caller", "lb", 0), ("lb", "server", 0)], policies={"lb": RoutingPolicy.WEIGHTED}, weights=[1, 0])
     failed = assert_error(client.post("/api/v1/simulations", json=weighted.model_dump(mode="json")), 422, "validation_error")
     assert [(detail.path, detail.code) for detail in failed.error.details] == [("/document/nodes/1/routing_policy", "all_zero_weights")]
-    overflow = request_for([("caller", "caller_group"), ("server", "server")], [("caller", "server", 0)], sources={"caller": MAX_INTEGER})
+    overflow = request_for([("caller", ComponentType.CALLER_GROUP), ("server", ComponentType.SERVER)], [("caller", "server", 0)], sources={"caller": MAX_INTEGER})
     failed = assert_error(client.post("/api/v1/simulations", json=overflow.model_dump(mode="json")), 422, "validation_error")
     assert [(detail.path, detail.code) for detail in failed.error.details] == [("/total_ticks", "count_overflow")]
     assert "Reduce" in failed.error.details[0].message
@@ -162,7 +164,7 @@ def test_simulation_readiness_and_count_overflow_detail_codes(client: TestClient
 
 def test_concurrent_http_runs_reset_router_cursors(client: TestClient) -> None:
     request = request_for(
-        [("caller", "caller_group"), ("lb", "load_balancer"), ("left", "server"), ("right", "server")],
+        [("caller", ComponentType.CALLER_GROUP), ("lb", ComponentType.LOAD_BALANCER), ("left", ComponentType.SERVER), ("right", ComponentType.SERVER)],
         [("caller", "lb", 0), ("lb", "left", 0), ("lb", "right", 1)], ticks=5, sources={"caller": 3},
     ).model_dump(mode="json")
 

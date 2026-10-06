@@ -1,3 +1,5 @@
+import { ComponentType } from '../src/lib/domain/component-types';
+import { RoutingPolicy } from '../src/lib/domain/routing-policies';
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import type { Architecture, ArchitectureDocument } from '../src/lib/domain';
 import type { SimulationResult } from '../src/lib/simulation';
@@ -7,10 +9,10 @@ const api = 'http://127.0.0.1:8000/api/v1';
 const simulationUrl = `${api}/simulations`;
 function reference(): ArchitectureDocument {
   return { format_version: 1, nodes: [
-    { id: 'caller', type: 'caller_group', label: 'Caller Group', position: { x: 0, y: 0 }, capacity_rps: null, caller_count: 10, test_rps: 100 },
-    { id: 'lb', type: 'load_balancer', label: 'Load Balancer', position: { x: 250, y: 0 }, capacity_rps: 100, routing_policy: 'round_robin' },
-    { id: 'server', type: 'server', label: 'Server', position: { x: 500, y: 0 }, capacity_rps: 60 },
-    { id: 'database', type: 'database', label: 'Database', position: { x: 750, y: 0 }, capacity_rps: 60 },
+    { id: 'caller', type: ComponentType.CALLER_GROUP, label: 'Caller Group', position: { x: 0, y: 0 }, capacity_rps: null, caller_count: 10, test_rps: 100 },
+    { id: 'lb', type: ComponentType.LOAD_BALANCER, label: 'Load Balancer', position: { x: 250, y: 0 }, capacity_rps: 100, routing_policy: RoutingPolicy.ROUND_ROBIN },
+    { id: 'server', type: ComponentType.SERVER, label: 'Server', position: { x: 500, y: 0 }, capacity_rps: 60 },
+    { id: 'database', type: ComponentType.DATABASE, label: 'Database', position: { x: 750, y: 0 }, capacity_rps: 60 },
   ], edges: [
     { id: 'caller-to-lb', source: 'caller', target: 'lb', order: 0, weight: 1 },
     { id: 'lb-to-server', source: 'lb', target: 'server', order: 0, weight: 1 },
@@ -128,7 +130,7 @@ test('successful New ignores late Run responses and resets the runtime context',
 });
 
 test('capacity text is precise at normal, 80%, and full utilization with zero-source runs allowed', async ({ page }) => {
-  const doc = reference(); doc.nodes[0].type === 'caller_group' && (doc.nodes[0].test_rps = 80); doc.nodes[2].type === 'server' && (doc.nodes[2].capacity_rps = 100); doc.nodes[3].type === 'database' && (doc.nodes[3].capacity_rps = 100); await load(page, doc); await run(page);
+  const doc = reference(); doc.nodes[0].type === ComponentType.CALLER_GROUP && (doc.nodes[0].test_rps = 80); doc.nodes[2].type === ComponentType.SERVER && (doc.nodes[2].capacity_rps = 100); doc.nodes[3].type === ComponentType.DATABASE && (doc.nodes[3].capacity_rps = 100); await load(page, doc); await run(page);
   await select(page, 'Load Balancer'); await expect(page.locator('.capacity-card')).toContainText('Normal'); await step(page, 2); await expect(page.locator('.capacity-card')).toContainText('80%'); await expect(page.locator('.capacity-card')).toContainText('Near capacity');
   await page.getByRole('button', { name: 'Edit', exact: true }).click(); await select(page, 'Caller Group'); await page.getByLabel('Total test RPS').fill('0'); const zero = await run(page); expect(zero.summary).toEqual({ generated: 0, completed: 0, dropped: 0, in_flight: 0 }); await step(page, 'last'); await expect(page.getByTestId('cumulative-strip')).toContainText('Generated 0');
 });
@@ -157,7 +159,7 @@ test('deletion retains pending Run and prior results except after successful act
 test('vertical and backward Replay routes keep traffic paths and labels clear of component text and metrics', async ({ page }) => {
   const doc = reference();
   doc.nodes[0].position = { x: 650, y: 0 };
-  doc.nodes[1] = { id: 'lb', type: 'gateway', label: 'Gateway with a long route label', position: { x: 0, y: 0 }, capacity_rps: 100, routing_policy: 'round_robin' };
+  doc.nodes[1] = { id: 'lb', type: ComponentType.GATEWAY, label: 'Gateway with a long route label', position: { x: 0, y: 0 }, capacity_rps: 100, routing_policy: RoutingPolicy.ROUND_ROBIN };
   doc.nodes[2].position = { x: 0, y: 430 }; doc.nodes[3].position = { x: 650, y: 430 };
   await load(page, doc); await run(page); await step(page, 'last'); await page.getByRole('button', { name: 'Fit diagram' }).click();
   await page.waitForTimeout(200); // The existing Fit transition lasts 180 ms.

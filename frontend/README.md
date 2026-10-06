@@ -68,6 +68,8 @@ The production bundle is in `dist`. `npm run preview` serves it locally for insp
 
 The domain module owns contract-shaped schemas and graph commands. Editor state owns the working document, saved baseline, field drafts, and Save snapshot reconciliation. A small asynchronous architecture-store interface isolates HTTP persistence. The simulation adapter validates complete results once and freezes the captured snapshot and frames. The playback clock selects recorded frames; it does not calculate traffic. Canvas presentation excludes runtime metadata from persistence.
 
+Use the named constants in [`src/lib/domain/*.ts`](src/lib/domain/) for component types, routing policies, and capacity statuses. These files define the semantic values used by schemas, UI logic, and behavior tests. HTTP event names and fixture IDs belong to different interfaces; keep them as their own strings. Raw contract examples and CSS selectors retain their boundary values.
+
 An explicit development-only `?test-store` mode selects the browser placeholder adapter and lets acceptance tests hold a Save through the same interface. Its control module is excluded from production builds. The normal application uses HTTP; there are no user-facing artificial delays or random failures.
 
 The approved editor behavior is specified in the [frontend spec](../specs/frontend/frontend-spec.md). The [backend integration spec](../specs/frontend/backend-integration-spec.md) supersedes its temporary browser-only persistence boundary.

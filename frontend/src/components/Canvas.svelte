@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isComponentType, type ComponentType } from '../lib/domain/component-types';
   import { onDestroy, setContext, tick, untrack } from 'svelte';
   import { SvelteFlow, Background, BackgroundVariant, MarkerType, MiniMap, useSvelteFlow } from '@xyflow/svelte';
   import type { Edge } from '@xyflow/svelte';
@@ -6,7 +7,7 @@
   import '@xyflow/svelte/dist/style.css';
   import { canvasNodes, canvasEdges } from '../lib/canvas';
   import type { CanvasNode } from '../lib/canvas';
-  import type { ArchitectureDocument, ComponentType } from '../lib/domain';
+  import type { ArchitectureDocument } from '../lib/domain';
   import type { SimulationFrame } from '../lib/simulation';
   import { REPLAY_VIEW, type ReplayView } from '../lib/replay-view';
   import ArchitectureNode from './ArchitectureNode.svelte';
@@ -99,7 +100,7 @@
   function drop(event: DragEvent): void {
     event.preventDefault(); if (locked || readonly) return;
     const type = event.dataTransfer?.getData('application/sysd-component');
-    if (type === 'caller_group' || type === 'load_balancer' || type === 'gateway' || type === 'server' || type === 'database') onadd(type, flow.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+    if (isComponentType(type)) onadd(type, flow.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
   }
   function keydown(event: KeyboardEvent): void {
     if (locked || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement || (event.target instanceof Element && event.target.closest('[contenteditable]:not([contenteditable="false"])'))) return;

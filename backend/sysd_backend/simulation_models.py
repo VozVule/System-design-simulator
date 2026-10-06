@@ -4,6 +4,7 @@ from typing import Self, TypeAlias
 
 from pydantic import model_validator
 
+from sysd_backend.domain.component_types import ComponentType
 from sysd_backend.models import ArchitectureDocument, ElementId, NonnegativeInteger, PositiveInteger, StrictModel
 
 
@@ -74,7 +75,7 @@ class SimulationResult(StrictModel):
                 raise ValueError("Recording tick and component coverage must match the snapshot.")
             for node in document.nodes:
                 metrics = frame.nodes[node.id]
-                if (node.type == "caller_group") != isinstance(metrics, CallerFrame):
+                if (node.type == ComponentType.CALLER_GROUP) != isinstance(metrics, CallerFrame):
                     raise ValueError("Node metrics must match the snapshot component type.")
                 if isinstance(metrics, ProcessingFrame) and metrics.received != metrics.handled + metrics.dropped:
                     raise ValueError("Received requests must equal handled plus dropped requests.")

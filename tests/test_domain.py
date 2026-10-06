@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
+from sysd_backend.domain.component_types import ComponentType
 from sysd_backend.models import ArchitectureDocument, ArchitectureWrite
 from sysd_backend.validation import validate_graph
 
@@ -21,23 +22,23 @@ def test_dangling_connection_has_stable_issue_location() -> None:
 
 
 @pytest.mark.parametrize(("nodes", "edges", "code"), [
-    ([("a", "gateway"), ("b", "gateway")], [("a", "b", 0), ("b", "a", 0)], "cycle"),
-    ([("a", "gateway")], [("a", "a", 0)], "self_connection"),
-    ([("a", "gateway"), ("b", "server")], [("a", "b", 0), ("a", "b", 1)], "duplicate_connection"),
-    ([("a", "gateway"), ("b", "server"), ("c", "server")], [("a", "b", 0), ("a", "c", 0)], "duplicate_order"),
-    ([("a", "gateway"), ("b", "caller_group")], [("a", "b", 0)], "forbidden_incoming"),
-    ([("a", "caller_group"), ("b", "server"), ("c", "server")], [("a", "b", 0), ("a", "c", 1)], "too_many_outgoing"),
-    ([("a", "server"), ("b", "server"), ("c", "server")], [("a", "b", 0), ("a", "c", 1)], "too_many_outgoing"),
-    ([("a", "database"), ("b", "server")], [("a", "b", 0)], "forbidden_outgoing"),
-    ([("a", "gateway"), ("a", "gateway")], [], "duplicate_id"),
+    ([("a", ComponentType.GATEWAY), ("b", ComponentType.GATEWAY)], [("a", "b", 0), ("b", "a", 0)], "cycle"),
+    ([("a", ComponentType.GATEWAY)], [("a", "a", 0)], "self_connection"),
+    ([("a", ComponentType.GATEWAY), ("b", ComponentType.SERVER)], [("a", "b", 0), ("a", "b", 1)], "duplicate_connection"),
+    ([("a", ComponentType.GATEWAY), ("b", ComponentType.SERVER), ("c", ComponentType.SERVER)], [("a", "b", 0), ("a", "c", 0)], "duplicate_order"),
+    ([("a", ComponentType.GATEWAY), ("b", ComponentType.CALLER_GROUP)], [("a", "b", 0)], "forbidden_incoming"),
+    ([("a", ComponentType.CALLER_GROUP), ("b", ComponentType.SERVER), ("c", ComponentType.SERVER)], [("a", "b", 0), ("a", "c", 1)], "too_many_outgoing"),
+    ([("a", ComponentType.SERVER), ("b", ComponentType.SERVER), ("c", ComponentType.SERVER)], [("a", "b", 0), ("a", "c", 1)], "too_many_outgoing"),
+    ([("a", ComponentType.DATABASE), ("b", ComponentType.SERVER)], [("a", "b", 0)], "forbidden_outgoing"),
+    ([("a", ComponentType.GATEWAY), ("a", ComponentType.GATEWAY)], [], "duplicate_id"),
 ])
-def test_forbidden_graph_shapes(nodes: list[tuple[str, str]], edges: list[tuple[str, str, int]], code: str) -> None:
+def test_forbidden_graph_shapes(nodes: list[tuple[str, ComponentType]], edges: list[tuple[str, str, int]], code: str) -> None:
     document = ArchitectureDocument.model_validate(graph_payload(nodes, edges))
     assert code in {issue.code for issue in validate_graph(document)}
 
 
 def test_ids_are_unique_across_nodes_and_connections() -> None:
-    payload = graph_payload([("a", "gateway"), ("b", "server")], [("a", "b", 0)])
+    payload = graph_payload([("a", ComponentType.GATEWAY), ("b", ComponentType.SERVER)], [("a", "b", 0)])
     edge = as_object(as_array(payload["edges"])[0])
     edge["id"] = "a"
     payload["edges"] = [edge]
@@ -46,7 +47,7 @@ def test_ids_are_unique_across_nodes_and_connections() -> None:
 
 
 def test_acyclic_fanin_multiple_sources_order_gaps_and_zero_weights_are_allowed() -> None:
-    nodes = [("source1", "caller_group"), ("source2", "caller_group"), ("router", "load_balancer"), ("left", "gateway"), ("right", "gateway"), ("server", "server"), ("db", "database")]
+    nodes = [("source1", ComponentType.CALLER_GROUP), ("source2", ComponentType.CALLER_GROUP), ("router", ComponentType.LOAD_BALANCER), ("left", ComponentType.GATEWAY), ("right", ComponentType.GATEWAY), ("server", ComponentType.SERVER), ("db", ComponentType.DATABASE)]
     edges = [("source1", "router", 0), ("source2", "router", 0), ("router", "left", 7), ("router", "right", 2), ("left", "server", 0), ("right", "server", 0), ("server", "db", 0)]
     payload = graph_payload(nodes, edges)
     document = ArchitectureDocument.model_validate(payload)
@@ -59,7 +60,7 @@ def test_acyclic_fanin_multiple_sources_order_gaps_and_zero_weights_are_allowed(
 
 
 def test_long_acyclic_graph_does_not_require_recursive_validation() -> None:
-    payload = graph_payload([(f"node_{index}", "gateway") for index in range(1200)], [(f"node_{index}", f"node_{index + 1}", 0) for index in range(1199)])
+    payload = graph_payload([(f"node_{index}", ComponentType.GATEWAY) for index in range(1200)], [(f"node_{index}", f"node_{index + 1}", 0) for index in range(1199)])
     assert validate_graph(ArchitectureDocument.model_validate(payload)) == []
 
 
@@ -91,7 +92,7 @@ def test_format_version_is_strict(invalid: object) -> None:
 
 @pytest.mark.parametrize("invalid", [-1, "1", True, float("nan"), float("inf")])
 def test_weights_must_be_nonnegative_finite_numbers(invalid: object) -> None:
-    payload = graph_payload([("a", "gateway"), ("b", "server")], [("a", "b", 0)])
+    payload = graph_payload([("a", ComponentType.GATEWAY), ("b", ComponentType.SERVER)], [("a", "b", 0)])
     edge = as_object(as_array(payload["edges"])[0])
     edge["weight"] = invalid
     payload["edges"] = [edge]

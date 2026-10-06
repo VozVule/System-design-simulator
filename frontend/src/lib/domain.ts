@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { ComponentType, ROUTER_COMPONENT_TYPES, SINGLE_DESTINATION_COMPONENT_TYPES } from './domain/component-types';
+import type { RouterComponentType } from './domain/component-types';
+import { RoutingPolicy } from './domain/routing-policies';
+export { ComponentType, RoutingPolicy };
 
 const positive = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
 const nonnegative = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -6,13 +10,13 @@ const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/);
 const label = z.string().min(1).refine((s) => [...s].length <= 120, 'Use at most 120 characters.').refine((s) => s.trim().length > 0, 'Enter a nonblank value.');
 const position = z.strictObject({ x: z.number().finite(), y: z.number().finite() });
 const common = { id, label, position };
-const routing = z.enum(['round_robin', 'weighted']);
+const routing = z.enum(RoutingPolicy);
 export const componentSchema = z.discriminatedUnion('type', [
-  z.strictObject({ ...common, type: z.literal('caller_group'), capacity_rps: z.null(), caller_count: positive, test_rps: nonnegative }),
-  z.strictObject({ ...common, type: z.literal('load_balancer'), capacity_rps: positive, routing_policy: routing }),
-  z.strictObject({ ...common, type: z.literal('gateway'), capacity_rps: positive, routing_policy: routing }),
-  z.strictObject({ ...common, type: z.literal('server'), capacity_rps: positive }),
-  z.strictObject({ ...common, type: z.literal('database'), capacity_rps: positive }),
+  z.strictObject({ ...common, type: z.literal(ComponentType.CALLER_GROUP), capacity_rps: z.null(), caller_count: positive, test_rps: nonnegative }),
+  z.strictObject({ ...common, type: z.literal(ComponentType.LOAD_BALANCER), capacity_rps: positive, routing_policy: routing }),
+  z.strictObject({ ...common, type: z.literal(ComponentType.GATEWAY), capacity_rps: positive, routing_policy: routing }),
+  z.strictObject({ ...common, type: z.literal(ComponentType.SERVER), capacity_rps: positive }),
+  z.strictObject({ ...common, type: z.literal(ComponentType.DATABASE), capacity_rps: positive }),
 ]);
 export const connectionSchema = z.strictObject({ id, source: id, target: id, order: nonnegative, weight: z.number().finite().min(0) });
 export const documentSchema = z.strictObject({ format_version: z.literal(1), nodes: z.array(componentSchema), edges: z.array(connectionSchema) });
@@ -20,7 +24,8 @@ export const writeSchema = z.strictObject({ name: label, document: documentSchem
 const timestamp = z.string().datetime().endsWith('Z');
 export const architectureSchema = z.strictObject({ ...writeSchema.shape, id: z.uuidv4(), created_at: timestamp, updated_at: timestamp });
 export type Component = z.infer<typeof componentSchema>;
-export type ComponentType = Component['type'];
+export type RouterComponent = Extract<Component, { type: RouterComponentType }>;
+export const isRouterComponent = (component: Component): component is RouterComponent => ROUTER_COMPONENT_TYPES.has(component.type);
 export type Connection = z.infer<typeof connectionSchema>;
 export type ArchitectureDocument = z.infer<typeof documentSchema>;
 export type ArchitectureWrite = z.infer<typeof writeSchema>;
@@ -47,19 +52,19 @@ export class ArchitectureError extends Error {
   }
 }
 export const catalog: { type: ComponentType; name: string; description: string; color: string }[] = [
-  { type: 'caller_group', name: 'Caller Group', description: 'Generate offered traffic', color: '#b77926' },
-  { type: 'load_balancer', name: 'Load Balancer', description: 'Distribute across destinations', color: '#6f57d2' },
-  { type: 'gateway', name: 'Gateway', description: 'Route incoming requests', color: '#278597' },
-  { type: 'server', name: 'Server', description: 'Handle or forward traffic', color: '#4377c5' },
-  { type: 'database', name: 'Database', description: 'Handle database requests', color: '#41866c' },
+  { type: ComponentType.CALLER_GROUP, name: 'Caller Group', description: 'Generate offered traffic', color: '#b77926' },
+  { type: ComponentType.LOAD_BALANCER, name: 'Load Balancer', description: 'Distribute across destinations', color: '#6f57d2' },
+  { type: ComponentType.GATEWAY, name: 'Gateway', description: 'Route incoming requests', color: '#278597' },
+  { type: ComponentType.SERVER, name: 'Server', description: 'Handle or forward traffic', color: '#4377c5' },
+  { type: ComponentType.DATABASE, name: 'Database', description: 'Handle database requests', color: '#41866c' },
 ];
 export const typeName = (type: ComponentType): string => catalog.find((c) => c.type === type)?.name ?? type;
 export function newComponent(type: ComponentType, at: { x: number; y: number }, nodeId: string = crypto.randomUUID()): Component {
   const base = { id: nodeId, label: typeName(type), position: at };
   switch (type) {
-    case 'caller_group': return { ...base, type, capacity_rps: null, caller_count: 100, test_rps: 100 };
-    case 'load_balancer': case 'gateway': return { ...base, type, capacity_rps: 100, routing_policy: 'round_robin' };
-    case 'server': case 'database': return { ...base, type, capacity_rps: 100 };
+    case ComponentType.CALLER_GROUP: return { ...base, type, capacity_rps: null, caller_count: 100, test_rps: 100 };
+    case ComponentType.LOAD_BALANCER: case ComponentType.GATEWAY: return { ...base, type, capacity_rps: 100, routing_policy: RoutingPolicy.ROUND_ROBIN };
+    case ComponentType.SERVER: case ComponentType.DATABASE: return { ...base, type, capacity_rps: 100 };
   }
 }
 export const clone = <T>(value: T): T => structuredClone(value);
@@ -92,11 +97,11 @@ export function graphIssues(doc: ArchitectureDocument): ErrorDetail[] {
     outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target]);
     incoming.set(edge.target, (incoming.get(edge.target) ?? 0) + 1);
     const source = nodes.get(edge.source), target = nodes.get(edge.target);
-    if (target?.type === 'caller_group') issue(`edges/${i}/target`, 'forbidden_incoming', 'Caller Groups cannot receive connections.');
-    if (source?.type === 'database') issue(`edges/${i}/source`, 'forbidden_outgoing', 'Databases are terminal and cannot have outgoing connections.');
+    if (target?.type === ComponentType.CALLER_GROUP) issue(`edges/${i}/target`, 'forbidden_incoming', 'Caller Groups cannot receive connections.');
+    if (source?.type === ComponentType.DATABASE) issue(`edges/${i}/source`, 'forbidden_outgoing', 'Databases are terminal and cannot have outgoing connections.');
   });
   doc.nodes.forEach((node, i) => {
-    if ((node.type === 'caller_group' || node.type === 'server') && (outgoing.get(node.id)?.length ?? 0) > 1) issue(`nodes/${i}`, 'too_many_outgoing', `${typeName(node.type)} supports at most one outgoing connection.`);
+    if (SINGLE_DESTINATION_COMPONENT_TYPES.has(node.type) && (outgoing.get(node.id)?.length ?? 0) > 1) issue(`nodes/${i}`, 'too_many_outgoing', `${typeName(node.type)} supports at most one outgoing connection.`);
   });
   const degrees = new Map(doc.nodes.map((n) => [n.id, incoming.get(n.id) ?? 0]));
   const queue = doc.nodes.filter((n) => degrees.get(n.id) === 0).map((n) => n.id);

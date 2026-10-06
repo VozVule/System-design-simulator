@@ -1,8 +1,9 @@
+import { ComponentType } from '../src/lib/domain/component-types';
 import { describe, expect, it, vi } from 'vitest';
 import { HttpArchitectureStore } from '../src/lib/http-storage';
 import { newComponent, type Architecture, type ArchitectureWrite } from '../src/lib/domain';
 
-const write: ArchitectureWrite = { name: '  Application  ', document: { format_version: 1, nodes: [newComponent('server', { x: -12.5, y: 40 }, 'server')], edges: [] } };
+const write: ArchitectureWrite = { name: '  Application  ', document: { format_version: 1, nodes: [newComponent(ComponentType.SERVER, { x: -12.5, y: 40 }, 'server')], edges: [] } };
 const resource: Architecture = { ...write, name: 'Application', id: 'df0748cc-6f1e-48dd-bc32-1a85848a2f32', created_at: '2026-10-03T10:00:00.123456Z', updated_at: '2026-10-03T10:01:00.123456Z' };
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 

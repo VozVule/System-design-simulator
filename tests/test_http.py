@@ -7,6 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 
+from sysd_backend.domain.component_types import ComponentType
+from sysd_backend.domain.routing_policies import RoutingPolicy
 from sysd_backend.api import create_app
 from sysd_backend.models import Architecture, ErrorCode, ErrorResponse
 from sysd_backend.settings import Settings
@@ -78,7 +80,7 @@ def test_roundtrip_all_components_then_add_edit_remove_and_rename(client: TestCl
     nodes = [node for node in nodes if node["id"] != "database"]
     server = next(node for node in nodes if node["id"] == "server")
     server.update(capacity_rps=42, label="Changed", position={"x": -42, "y": 3.25})
-    nodes.append({"id": "new_db", "type": "database", "label": "New database", "position": {"x": 10, "y": 20}, "capacity_rps": 300})
+    nodes.append({"id": "new_db", "type": ComponentType.DATABASE, "label": "New database", "position": {"x": 10, "y": 20}, "capacity_rps": 300})
     document["nodes"] = nodes
     document["edges"] = [edge for edge in as_array(document["edges"]) if as_object(edge)["target"] != "database"]
     payload.update(name="Updated", document=document)
@@ -145,7 +147,7 @@ def test_unknown_fields_are_rejected_at_nested_levels(client: TestClient) -> Non
         elif location == "document":
             document[field] = []
         elif location == "node":
-            nodes[0][field] = "weighted"
+            nodes[0][field] = RoutingPolicy.WEIGHTED
         elif location == "position":
             position = as_object(nodes[0]["position"])
             position[field] = 1
@@ -170,9 +172,9 @@ def test_graph_failures_are_field_errors_and_do_not_replace_saved_state(client: 
     created = client.post("/api/v1/architectures", json=full_payload())
     location = created.headers["location"]
     invalid_documents = [
-        graph_payload([("a", "gateway")], [("a", "missing", 0)]),
-        graph_payload([("a", "gateway"), ("b", "gateway")], [("a", "b", 0), ("b", "a", 0)]),
-        graph_payload([("a", "server"), ("b", "server"), ("c", "server")], [("a", "b", 0), ("a", "c", 1)]),
+        graph_payload([("a", ComponentType.GATEWAY)], [("a", "missing", 0)]),
+        graph_payload([("a", ComponentType.GATEWAY), ("b", ComponentType.GATEWAY)], [("a", "b", 0), ("b", "a", 0)]),
+        graph_payload([("a", ComponentType.SERVER), ("b", ComponentType.SERVER), ("c", ComponentType.SERVER)], [("a", "b", 0), ("a", "c", 1)]),
     ]
     for document in invalid_documents:
         error = assert_error(client.put(location, json={"name": "Invalid replacement", "document": document}), 422, "validation_error")
@@ -223,9 +225,9 @@ def test_missing_name_or_document_never_merges_existing_data(client: TestClient)
 
 def test_editing_states_can_be_saved(client: TestClient) -> None:
     for document in (
-        graph_payload([("a", "caller_group")], []),
-        graph_payload([("a", "gateway")], []),
-        graph_payload([("a", "load_balancer"), ("b", "server")], [("a", "b", 12)]),
+        graph_payload([("a", ComponentType.CALLER_GROUP)], []),
+        graph_payload([("a", ComponentType.GATEWAY)], []),
+        graph_payload([("a", ComponentType.LOAD_BALANCER), ("b", ComponentType.SERVER)], [("a", "b", 12)]),
     ):
         response = client.post("/api/v1/architectures", json={"name": "Incomplete", "document": document})
         assert response.status_code == 201, response.text

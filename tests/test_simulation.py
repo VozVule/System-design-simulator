@@ -6,6 +6,9 @@ import pytest
 from pydantic import ValidationError
 
 from sysd_backend.errors import SimulationInvalid
+from sysd_backend.domain.component_types import ComponentType, ROUTER_COMPONENT_TYPES
+from sysd_backend.domain.routing_policies import RoutingPolicy
+from sysd_backend.domain.traffic_phases import TrafficPhase
 from sysd_backend.models import ArchitectureDocument, CallerGroup, MAX_INTEGER
 from sysd_backend.simulation import (
     Cohort, RoutingState, merge_arrival, proportional_allocation, round_robin_allocation,
@@ -19,13 +22,13 @@ from tests.helpers import as_array, as_object, graph_payload
 
 
 def request_for(
-    nodes: list[tuple[str, str]],
+    nodes: list[tuple[str, ComponentType]],
     edges: list[tuple[str, str, int]],
     *,
     ticks: int = 60,
     sources: dict[str, int] | None = None,
     capacities: dict[str, int] | None = None,
-    policies: dict[str, str] | None = None,
+    policies: dict[str, RoutingPolicy] | None = None,
     weights: list[float] | None = None,
 ) -> SimulationRequest:
     raw = graph_payload(nodes, edges)
@@ -33,12 +36,12 @@ def request_for(
     for node in raw_nodes:
         node_id = node["id"]
         assert isinstance(node_id, str)
-        if node["type"] == "caller_group":
+        if node["type"] == ComponentType.CALLER_GROUP:
             node["test_rps"] = (sources or {}).get(node_id, 100)
         else:
             node["capacity_rps"] = (capacities or {}).get(node_id, 100)
-        if node["type"] in ("gateway", "load_balancer"):
-            node["routing_policy"] = (policies or {}).get(node_id, "round_robin")
+        if node["type"] in ROUTER_COMPONENT_TYPES:
+            node["routing_policy"] = (policies or {}).get(node_id, RoutingPolicy.ROUND_ROBIN)
     raw_edges = [as_object(value) for value in as_array(raw["edges"])]
     for index, edge in enumerate(raw_edges):
         edge["weight"] = weights[index] if weights else 1.0
@@ -48,7 +51,7 @@ def request_for(
 
 def reference_request(ticks: int = 60) -> SimulationRequest:
     return request_for(
-        [("caller", "caller_group"), ("lb", "load_balancer"), ("server", "server"), ("database", "database")],
+        [("caller", ComponentType.CALLER_GROUP), ("lb", ComponentType.LOAD_BALANCER), ("server", ComponentType.SERVER), ("database", ComponentType.DATABASE)],
         [("caller", "lb", 0), ("lb", "server", 0), ("server", "database", 0)],
         ticks=ticks, capacities={"server": 60, "database": 60},
     )
@@ -80,7 +83,7 @@ def assert_accounting(result: SimulationResult) -> None:
         for node in document.nodes:
             incoming = [edge for edge in document.edges if edge.target == node.id]
             outgoing = [edge for edge in document.edges if edge.source == node.id]
-            if node.type == "caller_group":
+            if node.type == ComponentType.CALLER_GROUP:
                 value = caller(frame, node.id)
                 generated += value.generated
                 completed += value.completed
@@ -135,7 +138,7 @@ def test_full_reference_round_trip_and_recording() -> None:
     (1, 100, 0, 0, 100), (2, 200, 0, 40, 160), (3, 300, 60, 80, 160),
 ])
 def test_terminal_server_does_not_drain(ticks: int, generated: int, completed: int, dropped: int, in_flight: int) -> None:
-    result = simulate(request_for([("caller", "caller_group"), ("server", "server")], [("caller", "server", 0)], ticks=ticks, capacities={"server": 60}))
+    result = simulate(request_for([("caller", ComponentType.CALLER_GROUP), ("server", ComponentType.SERVER)], [("caller", "server", 0)], ticks=ticks, capacities={"server": 60}))
     assert result.summary == SimulationTotals(generated=generated, completed=completed, dropped=dropped, in_flight=in_flight)
     assert len(result.frames) == ticks + 1
     assert_accounting(result)
@@ -143,7 +146,7 @@ def test_terminal_server_does_not_drain(ticks: int, generated: int, completed: i
 
 def test_cohort_admission_is_shared_and_returns_to_each_caller() -> None:
     request = request_for(
-        [("caller-b", "caller_group"), ("server", "server"), ("caller-a", "caller_group")],
+        [("caller-b", ComponentType.CALLER_GROUP), ("server", ComponentType.SERVER), ("caller-a", ComponentType.CALLER_GROUP)],
         [("caller-b", "server", 0), ("caller-a", "server", 0)], ticks=3,
         sources={"caller-a": 70, "caller-b": 50},
     )
@@ -158,7 +161,7 @@ def test_cohort_admission_is_shared_and_returns_to_each_caller() -> None:
 
 def test_round_robin_cursor_is_shared_across_cohorts_and_ignores_drops() -> None:
     request = request_for(
-        [("a", "caller_group"), ("b", "caller_group"), ("lb", "load_balancer"), ("left", "server"), ("right", "server")],
+        [("a", ComponentType.CALLER_GROUP), ("b", ComponentType.CALLER_GROUP), ("lb", ComponentType.LOAD_BALANCER), ("left", ComponentType.SERVER), ("right", ComponentType.SERVER)],
         [("a", "lb", 0), ("b", "lb", 0), ("lb", "left", 9), ("lb", "right", 2)], ticks=5,
         sources={"a": 3, "b": 2}, capacities={"lb": 3}, weights=[0, 0, 0, 0],
     )
@@ -177,9 +180,9 @@ def test_round_robin_cursor_is_shared_across_cohorts_and_ignores_drops() -> None
 ])
 def test_weighted_routing_conserves_fractional_large_and_subnormal_weights(weights: list[float]) -> None:
     request = request_for(
-        [("caller", "caller_group"), ("gateway", "gateway"), ("zero", "server"), ("left", "server"), ("right", "server")],
+        [("caller", ComponentType.CALLER_GROUP), ("gateway", ComponentType.GATEWAY), ("zero", ComponentType.SERVER), ("left", ComponentType.SERVER), ("right", ComponentType.SERVER)],
         [("caller", "gateway", 0), ("gateway", "zero", 0), ("gateway", "left", 1), ("gateway", "right", 2)],
-        ticks=5, sources={"caller": 3}, policies={"gateway": "weighted"}, weights=[1, *weights],
+        ticks=5, sources={"caller": 3}, policies={"gateway": RoutingPolicy.WEIGHTED}, weights=[1, *weights],
     )
     result = simulate(request)
     expected = (1, 2) if weights[1] != weights[2] else (2, 1)
@@ -191,9 +194,9 @@ def test_weighted_routing_conserves_fractional_large_and_subnormal_weights(weigh
 
 def test_weighted_overflow_is_not_redistributed_and_creates_no_error_reply() -> None:
     result = simulate(request_for(
-        [("caller", "caller_group"), ("gateway", "gateway"), ("left", "server"), ("right", "server")],
+        [("caller", ComponentType.CALLER_GROUP), ("gateway", ComponentType.GATEWAY), ("left", ComponentType.SERVER), ("right", ComponentType.SERVER)],
         [("caller", "gateway", 0), ("gateway", "left", 0), ("gateway", "right", 1)], ticks=5,
-        policies={"gateway": "weighted"}, weights=[1, 70, 30], capacities={"left": 50},
+        policies={"gateway": RoutingPolicy.WEIGHTED}, weights=[1, 70, 30], capacities={"left": 50},
     ))
     assert processing(result.frames[3], "left") == ProcessingFrame(received=70, handled=50, dropped=20, responses_received=0, responses_returned=50)
     assert processing(result.frames[3], "right").responses_returned == 30
@@ -205,9 +208,9 @@ def test_weighted_overflow_is_not_redistributed_and_creates_no_error_reply() -> 
 
 def test_weighted_global_quota_across_one_request_cohorts() -> None:
     result = simulate(request_for(
-        [("a", "caller_group"), ("b", "caller_group"), ("c", "caller_group"), ("lb", "load_balancer"), ("left", "server"), ("right", "server")],
+        [("a", ComponentType.CALLER_GROUP), ("b", ComponentType.CALLER_GROUP), ("c", ComponentType.CALLER_GROUP), ("lb", ComponentType.LOAD_BALANCER), ("left", ComponentType.SERVER), ("right", ComponentType.SERVER)],
         [("a", "lb", 0), ("b", "lb", 0), ("c", "lb", 0), ("lb", "left", 0), ("lb", "right", 1)],
-        ticks=5, sources={"a": 1, "b": 1, "c": 1}, policies={"lb": "weighted"}, capacities={"left": 1},
+        ticks=5, sources={"a": 1, "b": 1, "c": 1}, policies={"lb": RoutingPolicy.WEIGHTED}, capacities={"left": 1},
     ))
     assert result.frames[2].edges["edge_3"].forwarded == 2
     assert result.frames[2].edges["edge_4"].forwarded == 1
@@ -219,7 +222,7 @@ def test_weighted_global_quota_across_one_request_cohorts() -> None:
 
 def test_actual_return_paths_survive_branch_fanin_capacity_and_changed_cursor() -> None:
     request = request_for(
-        [("caller-a", "caller_group"), ("caller-b", "caller_group"), ("split", "load_balancer"), ("left", "gateway"), ("right", "gateway"), ("merge", "gateway"), ("server", "server"), ("db", "database")],
+        [("caller-a", ComponentType.CALLER_GROUP), ("caller-b", ComponentType.CALLER_GROUP), ("split", ComponentType.LOAD_BALANCER), ("left", ComponentType.GATEWAY), ("right", ComponentType.GATEWAY), ("merge", ComponentType.GATEWAY), ("server", ComponentType.SERVER), ("db", ComponentType.DATABASE)],
         [("caller-a", "split", 0), ("caller-b", "split", 0), ("split", "left", 3), ("split", "right", 8), ("left", "merge", 0), ("right", "merge", 0), ("merge", "server", 0), ("server", "db", 0)],
         ticks=20, sources={"caller-a": 3, "caller-b": 2}, capacities={"merge": 3},
     )
@@ -243,12 +246,12 @@ def test_actual_return_paths_survive_branch_fanin_capacity_and_changed_cursor() 
 
 def test_identical_remaining_response_prefixes_merge_but_distinct_paths_do_not() -> None:
     arrivals: dict[str, dict[Cohort, int]] = {}
-    request = Cohort("caller", ("first", "left"), "request")
+    request = Cohort("caller", ("first", "left"), TrafficPhase.REQUEST)
     merge_arrival(arrivals, "merge", request, 2)
     merge_arrival(arrivals, "merge", replace(request, prefix=("first", "right")), 3)
     merge_arrival(arrivals, "merge", request, 4)
     assert len(arrivals["merge"]) == 2 and arrivals["merge"][request] == 6
-    reply = Cohort("caller", ("first",), "response")
+    reply = Cohort("caller", ("first",), TrafficPhase.RESPONSE)
     merge_arrival(arrivals, "router", reply, 2)
     merge_arrival(arrivals, "router", reply, 3)
     merge_arrival(arrivals, "router", reply, 0)
@@ -264,9 +267,9 @@ def test_nonterminal_capacity_is_free_for_returned_replies() -> None:
 
 def test_zero_rps_and_zero_weight_reachable_nodes_are_valid() -> None:
     request = request_for(
-        [("a", "caller_group"), ("b", "caller_group"), ("lb", "load_balancer"), ("left", "server"), ("right", "database"), ("terminal", "server")],
+        [("a", ComponentType.CALLER_GROUP), ("b", ComponentType.CALLER_GROUP), ("lb", ComponentType.LOAD_BALANCER), ("left", ComponentType.SERVER), ("right", ComponentType.DATABASE), ("terminal", ComponentType.SERVER)],
         [("a", "lb", 0), ("lb", "left", 0), ("lb", "right", 1), ("b", "terminal", 0)],
-        sources={"a": 0, "b": 0}, policies={"lb": "weighted"}, weights=[1, 1, 0, 1],
+        sources={"a": 0, "b": 0}, policies={"lb": RoutingPolicy.WEIGHTED}, weights=[1, 1, 0, 1],
     )
     assert validate_simulation(request) == []
     result = simulate(request)
@@ -276,12 +279,12 @@ def test_zero_rps_and_zero_weight_reachable_nodes_are_valid() -> None:
 
 @pytest.mark.parametrize(("nodes", "edges", "codes"), [
     ([], [], {"missing_source"}),
-    ([("server", "server")], [], {"missing_source", "unreachable_component"}),
-    ([("caller", "caller_group")], [], {"missing_destination"}),
-    ([("caller", "caller_group"), ("gateway", "gateway")], [("caller", "gateway", 0)], {"missing_destination"}),
-    ([("caller", "caller_group"), ("server", "server"), ("db", "database")], [("caller", "server", 0)], {"unreachable_component"}),
+    ([("server", ComponentType.SERVER)], [], {"missing_source", "unreachable_component"}),
+    ([("caller", ComponentType.CALLER_GROUP)], [], {"missing_destination"}),
+    ([("caller", ComponentType.CALLER_GROUP), ("gateway", ComponentType.GATEWAY)], [("caller", "gateway", 0)], {"missing_destination"}),
+    ([("caller", ComponentType.CALLER_GROUP), ("server", ComponentType.SERVER), ("db", ComponentType.DATABASE)], [("caller", "server", 0)], {"unreachable_component"}),
 ])
-def test_not_ready_graphs(nodes: list[tuple[str, str]], edges: list[tuple[str, str, int]], codes: set[str]) -> None:
+def test_not_ready_graphs(nodes: list[tuple[str, ComponentType]], edges: list[tuple[str, str, int]], codes: set[str]) -> None:
     request = request_for(nodes, edges)
     assert {issue.code for issue in validate_simulation(request)} == codes
     with pytest.raises(SimulationInvalid):
@@ -289,20 +292,20 @@ def test_not_ready_graphs(nodes: list[tuple[str, str]], edges: list[tuple[str, s
 
 
 def test_no_destination_does_not_also_report_zero_weights() -> None:
-    request = request_for([("caller", "caller_group"), ("lb", "load_balancer")], [("caller", "lb", 0)], policies={"lb": "weighted"})
+    request = request_for([("caller", ComponentType.CALLER_GROUP), ("lb", ComponentType.LOAD_BALANCER)], [("caller", "lb", 0)], policies={"lb": RoutingPolicy.WEIGHTED})
     assert [issue.code for issue in validate_simulation(request)] == ["missing_destination"]
-    weighted = request_for([("caller", "caller_group"), ("lb", "load_balancer"), ("server", "server")], [("caller", "lb", 0), ("lb", "server", 0)], policies={"lb": "weighted"}, weights=[1, 0])
+    weighted = request_for([("caller", ComponentType.CALLER_GROUP), ("lb", ComponentType.LOAD_BALANCER), ("server", ComponentType.SERVER)], [("caller", "lb", 0), ("lb", "server", 0)], policies={"lb": RoutingPolicy.WEIGHTED}, weights=[1, 0])
     assert [(issue.code, issue.path) for issue in validate_simulation(weighted)] == [("all_zero_weights", "/document/nodes/1/routing_policy")]
 
 
 def test_structural_errors_precede_readiness() -> None:
-    request = request_for([("lb", "load_balancer")], [("lb", "missing", 0)])
+    request = request_for([("lb", ComponentType.LOAD_BALANCER)], [("lb", "missing", 0)])
     issues = validate_simulation(request)
     assert [(issue.code, issue.path) for issue in issues] == [("missing_endpoint", "/document/edges/0/target")]
 
 
 def test_safe_count_range_exact_arithmetic_before_allocation() -> None:
-    request = request_for([("caller", "caller_group"), ("server", "server")], [("caller", "server", 0)], ticks=1, sources={"caller": MAX_INTEGER}, capacities={"server": MAX_INTEGER})
+    request = request_for([("caller", ComponentType.CALLER_GROUP), ("server", ComponentType.SERVER)], [("caller", "server", 0)], ticks=1, sources={"caller": MAX_INTEGER}, capacities={"server": MAX_INTEGER})
     assert validate_count_range(request) == []
     result = simulate(request)
     assert result.summary.generated == MAX_INTEGER and result.summary.in_flight == MAX_INTEGER
@@ -321,7 +324,7 @@ def test_safe_count_range_exact_arithmetic_before_allocation() -> None:
 def test_request_volume_does_not_require_per_request_work() -> None:
     count = MAX_INTEGER // 5
     result = simulate(request_for(
-        [("caller", "caller_group"), ("lb", "load_balancer"), ("left", "server"), ("right", "server")],
+        [("caller", ComponentType.CALLER_GROUP), ("lb", ComponentType.LOAD_BALANCER), ("left", ComponentType.SERVER), ("right", ComponentType.SERVER)],
         [("caller", "lb", 0), ("lb", "left", 0), ("lb", "right", 1)], ticks=5,
         sources={"caller": count}, capacities={"lb": MAX_INTEGER, "left": MAX_INTEGER, "right": MAX_INTEGER},
     ))
@@ -348,7 +351,7 @@ def test_many_cohort_allocations_conserve_every_quota() -> None:
 
 def test_parallel_engine_runs_have_independent_state() -> None:
     request = request_for(
-        [("caller", "caller_group"), ("lb", "load_balancer"), ("left", "server"), ("right", "server")],
+        [("caller", ComponentType.CALLER_GROUP), ("lb", ComponentType.LOAD_BALANCER), ("left", ComponentType.SERVER), ("right", ComponentType.SERVER)],
         [("caller", "lb", 0), ("lb", "left", 0), ("lb", "right", 1)], sources={"caller": 3},
     )
     with ThreadPoolExecutor(max_workers=4) as executor:
@@ -380,7 +383,7 @@ def test_total_ticks_is_a_required_positive_json_integer(total_ticks: object) ->
 
 
 def test_twenty_component_chain_records_complete_flow() -> None:
-    nodes = [("caller", "caller_group"), *[(f"server{index}", "server") for index in range(18)], ("db", "database")]
+    nodes = [("caller", ComponentType.CALLER_GROUP), *[(f"server{index}", ComponentType.SERVER) for index in range(18)], ("db", ComponentType.DATABASE)]
     edges = [(nodes[index][0], nodes[index + 1][0], 0) for index in range(19)]
     result = simulate(request_for(nodes, edges, ticks=60))
     assert caller(result.frames[38], "caller").completed == 0
@@ -391,9 +394,9 @@ def test_twenty_component_chain_records_complete_flow() -> None:
 
 def twenty_component_fanin_request() -> SimulationRequest:
     nodes = [
-        ("caller-a", "caller_group"), ("caller-b", "caller_group"), ("split", "load_balancer"),
-        *[(f"branch{index}", "gateway") for index in range(6)], ("merge", "gateway"),
-        *[(f"server{index}", "server") for index in range(9)], ("db", "database"),
+        ("caller-a", ComponentType.CALLER_GROUP), ("caller-b", ComponentType.CALLER_GROUP), ("split", ComponentType.LOAD_BALANCER),
+        *[(f"branch{index}", ComponentType.GATEWAY) for index in range(6)], ("merge", ComponentType.GATEWAY),
+        *[(f"server{index}", ComponentType.SERVER) for index in range(9)], ("db", ComponentType.DATABASE),
     ]
     edges = [
         ("caller-a", "split", 0), ("caller-b", "split", 0),
@@ -404,7 +407,7 @@ def twenty_component_fanin_request() -> SimulationRequest:
     ]
     return request_for(
         nodes, edges, sources={"caller-a": 70, "caller-b": 50},
-        capacities={"split": 120, "merge": 100}, policies={"split": "weighted"},
+        capacities={"split": 120, "merge": 100}, policies={"split": RoutingPolicy.WEIGHTED},
         weights=[1, 1, *[float(index + 1) for index in range(6)], *([1.0] * 16)],
     )
 
