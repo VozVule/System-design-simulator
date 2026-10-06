@@ -5,6 +5,8 @@ Status: Accepted on 2026-10-03 with the consolidated release 1 contract
 
 The agreed [release 1 contract](../release-1.md) resolves the release defaults discussed below. Earlier proposal and open-decision wording records the interview progression; future-release and conditional-performance questions remain deferred.
 
+The 2026-10-06 [synchronous-response amendment](0008-synchronous-request-response-flow.md) supersedes this ADR's terminal-completion and response-exclusion defaults. The original discussion below remains historical. Requests still use the acyclic architecture, while replies follow the traversed connections in reverse and complete at their callers.
+
 ## Context
 
 The proposed model included latency and downstream-call completion. The user clarified that the simulator cannot know what software a server hosts or accurately estimate query duration, and explicitly deferred latency.

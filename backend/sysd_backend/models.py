@@ -147,6 +147,7 @@ DetailCode: TypeAlias = Literal[
     "required", "unknown_field", "invalid_type", "invalid_value", "unsupported_document_version",
     "duplicate_id", "missing_endpoint", "duplicate_connection", "duplicate_order", "self_connection",
     "cycle", "forbidden_incoming", "too_many_outgoing", "forbidden_outgoing",
+    "missing_source", "missing_destination", "all_zero_weights", "unreachable_component", "count_overflow",
 ]
 ErrorCode: TypeAlias = Literal[
     "invalid_json", "unsupported_media_type", "validation_error", "unsupported_document_version",

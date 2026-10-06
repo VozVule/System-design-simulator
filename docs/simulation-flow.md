@@ -1,28 +1,33 @@
 # Simulation flow and replay
 
 Date: 2026-10-03
-Status: Agreed on 2026-10-03 with the consolidated release 1 contract.
+Updated: 2026-10-06
+Status: One-hop rules agreed on 2026-10-03, extended to synchronous request/response flow on 2026-10-06. The user accepted the detailed specifications and requested parallel frontend and backend implementation on 2026-10-06. Implementation and automated/visual verification are complete.
 
 ## Settled structure
 
 1. Capture the architecture, component configuration, test RPS, and tick count as a fixed run snapshot.
-2. Represent components and directed connections as an acyclic graph in the Python backend. No loops or loopbacks.
+2. Represent request dependencies as an acyclic graph in the Python backend. Replies follow the traversed connections in reverse without adding reverse architecture edges.
 3. Calculate the run completely in the backend.
-4. Return aggregate per-tick frames and whole-run totals.
+4. Return aggregate request and response counts per tick, plus whole-run totals.
 5. Decode the JSON response once in the frontend. Play/pause/fast-forward selects frames using a playback clock; it does not rerun the simulation.
 
-The DAG describes topology. The tick engine calculates movement. Frames describe the resulting history. Playback controls how quickly that history is displayed. One-hop-per-tick propagation is selected.
+The DAG describes request topology. The tick engine calculates request and response movement. Frames describe the resulting history. Playback controls how quickly that history is displayed. One-hop-per-tick propagation applies to both directions.
 
 ## Shared rules
 
 - One tick is one virtual second.
 - Default total run length: 60 executed ticks, configurable. Tick 0 is the initial state; frames follow executed ticks 1 through the total.
+- Replay presents ticks as steps and does not show elapsed time. Playback speed controls display pacing only.
 - Caller groups generate their configured total RPS. Caller-group capacity is unused.
-- Processing nodes have per-tick capacity; excess arrivals drop.
+- Processing capacity applies to new incoming requests. Excess requests drop immediately without processing or a response. Replies pass without another capacity charge; waiting for a reply does not consume a later tick's capacity.
 - Routers select destinations without inspecting destination health or capacity.
 - Weighted splits are deterministic, with fixed-order rounding; no fanout.
 - Per processing node: `received = handled + dropped` and `capacity_used = handled / capacity`.
-- Counts are aggregate. No individual request traces are retained in release 1.
+- Responses have separate received/returned counts. They do not change request capacity use.
+- A handled request at a Database or terminal Server starts a reply. A request completes when that reply reaches its Caller Group.
+- Counts are aggregate. Internal batches retain caller and route provenance for correct return routing; no individual request traces are returned or retained as run history.
+- Dropped traffic is a final simulation outcome, receives no reply, and leaves the active in-flight inventory. Caller timeouts and failure status codes are outside this milestone.
 
 ## Earlier discussion: full-path accounting, not selected
 
@@ -32,38 +37,43 @@ A tick is an accounting window for that second's routed traffic. No per-hop resi
 
 With fixed RPS and fixed settings, per-tick values will often repeat. Cumulative counters still increase. Future components such as queues can introduce evolving state if selected and specified in a later release.
 
-## Selected model: advance traffic one hop per tick
+## Selected model: advance requests and replies one hop per tick
 
-For each tick, process each node's current incoming count, enforce its capacity, and schedule handled output as downstream arrivals for the next tick. Keep separate current and next arrival maps, then swap after all nodes have been processed. The release draft applies this boundary to source output too: callers generate on tick 1 and their first destination receives on tick 2.
+For each tick, process current incoming requests, enforce capacity once after fan-in, and schedule handled output as downstream requests for the next tick. A Database or Server with no outgoing request connection starts a reply instead. Current replies return along the actual traversed path and schedule their next reverse hop for the next tick. Load Balancers and Gateways do not route replies again.
 
-This deliberately introduces a one-step propagation delay. It is an abstract timing rule, not an estimate of service/query duration. Deeper paths take more ticks to produce terminal completions.
+Keep separate request/reply maps for current and next arrivals, then swap after all nodes have been processed. The boundary applies to source output too: callers generate on tick 1 and their first destination receives on tick 2. A newly created reply cannot be received upstream within its creation tick.
 
-Traffic awaiting its next hop is in flight. Excess arrivals still drop immediately; the next-tick buffers do not retain overflow. Execute exactly the selected total ticks. Callers emit during those ticks; stop at the final tick and report in-flight traffic instead of extending the run automatically.
+This deliberately introduces a one-step propagation delay. It is an abstract timing rule, not an estimate of service/query duration. Deeper paths take more ticks to return a successful response to the caller. A Server receiving a Database reply reports that event and returns the result upstream; application payload transformation is not modeled.
 
-All processing nodes read only current input. Outputs modify only next input. Merge all current arrivals before applying a node's capacity once. Node iteration order cannot cause multiple-hop traversal within one tick.
+Traffic awaiting its next request or reply hop is in flight. A logical request appears once in that active inventory. Do not count a Server's waiting context as another request. Excess requests still drop immediately; the next-tick buffers do not retain overflow. Execute exactly the selected total ticks. Callers emit during those ticks; stop at the final tick and report active traffic instead of extending the run automatically.
+
+All nodes read only current input in each direction. Outputs modify only next input. Merge current request arrivals before applying capacity once. Retain aggregate caller/route provenance so fan-in cannot send replies to the wrong caller. Node iteration order cannot cause multiple-hop traversal within one tick.
 
 The source-edge convention makes the clock uniform. It was accepted with the consolidated release contract: the earlier illustrative comparison injected external caller traffic directly into LB during its generation tick.
 
-## Reference timeline under the release draft
+## Reference timeline with synchronous replies
 
-Architecture: `Caller Group → LB → Server → Database`, where Database is terminal under the agreed release 1 role.
+Request architecture: `Caller Group → LB → Server → Database`. Database ends the forward leg and replies through `Server → LB → Caller Group`.
 
 - Generate 100 requests every executed tick.
 - Capacities: LB 100, Server 60, Database 60.
-- Tick 0 is the initial state; tick 1 reports the first completed virtual second.
+- Tick 0 is the initial state; the interface shows Step 0 and omits elapsed-time labels.
 - A frame reports node work during its tick. In-flight counts describe the boundary after that work.
 
-| Tick | Generated | LB received | Server received / handled / dropped | Database completed | In flight at boundary |
-| --- | ---: | ---: | --- | ---: | ---: |
-| 0 | 0 | 0 | 0 / 0 / 0 | 0 | 0 |
-| 1 | 100 | 0 | 0 / 0 / 0 | 0 | 100 |
-| 2 | 100 | 100 | 0 / 0 / 0 | 0 | 200 |
-| 3 | 100 | 100 | 100 / 60 / 40 | 0 | 260 |
-| 4 | 100 | 100 | 100 / 60 / 40 | 60 | 260 |
+| Step | Generated | LB requests received | Server requests received / handled / dropped | Database handled | Server replies received | LB replies received | Caller completed | In flight at boundary |
+| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 0 | 0 | 0 | 0 / 0 / 0 | 0 | 0 | 0 | 0 | 0 |
+| 1 | 100 | 0 | 0 / 0 / 0 | 0 | 0 | 0 | 0 | 100 |
+| 2 | 100 | 100 | 0 / 0 / 0 | 0 | 0 | 0 | 0 | 200 |
+| 3 | 100 | 100 | 100 / 60 / 40 | 0 | 0 | 0 | 0 | 260 |
+| 4 | 100 | 100 | 100 / 60 / 40 | 60 | 0 | 0 | 0 | 320 |
+| 5 | 100 | 100 | 100 / 60 / 40 | 60 | 60 | 0 | 0 | 380 |
+| 6 | 100 | 100 | 100 / 60 / 40 | 60 | 60 | 60 | 0 | 440 |
+| 7 | 100 | 100 | 100 / 60 / 40 | 60 | 60 | 60 | 60 | 440 |
 
-After 60 ticks: 6,000 generated, 3,420 completed, 2,320 dropped, 260 in flight.
+After 60 ticks: 6,000 generated, 3,240 completed at callers, 2,320 dropped, and 440 in flight. Database has handled 3,420 requests; those are processing visits, and 180 resulting replies are still on the return leg.
 
-Global accounting: `generated = terminal completions + dropped + in flight`. Summing handled counts across nodes counts visits, rather than unique completed requests.
+Global accounting: `generated = caller completions + dropped + in flight`. Boundary in flight equals the sum of all edge request forwarding and response returning counts. Summing handled counts across nodes counts visits, rather than unique completed requests.
 
 ## Proposed response shape
 
@@ -73,18 +83,23 @@ One illustrative frame excerpt:
 
 ```json
 {
-  "tick": 3,
+  "tick": 5,
   "nodes": {
-    "server": { "received": 100, "handled": 60, "dropped": 40 }
+    "server": { "received": 100, "handled": 60, "dropped": 40, "responses_received": 60, "responses_returned": 60 }
   },
   "edges": {
-    "server-to-database": { "forwarded": 60 }
+    "lb-to-server": { "forwarded": 100, "returned": 60 },
+    "server-to-database": { "forwarded": 60, "returned": 60 }
   }
 }
 ```
 
-Capacity comes from the fixed snapshot. Edge forwarding schedules next-tick arrival. Frames also include cumulative generated/completed/dropped counts and boundary in-flight counts.
+Capacity comes from the fixed snapshot. Edge `forwarded` schedules request arrival at its stored target next tick; `returned` schedules reply arrival at its stored source next tick. Frames also include current and cumulative generated/completed/dropped counts and boundary in-flight counts. Caller entries contain `generated` and `completed`.
 
 ## Agreed contract
 
-One-hop propagation and default total 60 ticks are settled. The agreed contract in [release-1.md](release-1.md) specifies source timing, terminal completion, rounding, validation, and persistence defaults.
+One-hop propagation and default total 60 ticks are settled. The current contract in [release-1.md](release-1.md) specifies source timing, caller completion, rounding, validation, and persistence defaults. The response amendment is recorded in [ADR 0008](adr/0008-synchronous-request-response-flow.md).
+
+The 2026-10-06 discussion selected Run from the current canvas, including unsaved changes; separate Edit and Replay modes; and a canvas, lower timeline, and selected-component inspector. Every component must be reachable from a Caller Group for Run, while Save continues to allow incomplete diagrams. About 20 components is the expected scale, without a new arbitrary graph-size or run-duration cap. Gateway request-type routing remains future work.
+
+The accepted [backend simulation specification](../specs/backend/simulation-spec.md) defines the tick engine, readiness checks, result accounting, and POST `/api/v1/simulations`. The accepted [frontend replay specification](../specs/frontend/simulation-replay-spec.md) defines snapshot isolation, step controls, metric scopes, and visual acceptance. The layout is accepted; final styling follows the existing editor and requires representative-diagram visual review.

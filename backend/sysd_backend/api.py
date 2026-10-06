@@ -12,11 +12,13 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
-from sysd_backend.errors import ArchitectureNotFound, BackendError, DocumentInvalid, StorageUnavailable
+from sysd_backend.errors import ArchitectureNotFound, BackendError, DocumentInvalid, SimulationInvalid, StorageUnavailable
 from sysd_backend.models import ApiError, Architecture, ArchitectureList, ArchitectureWrite, DetailCode, ErrorCode, ErrorDetail, ErrorResponse
 from sysd_backend.service import ArchitectureService
 from sysd_backend.settings import Settings
 from sysd_backend.storage import SQLiteArchitectureStore
+from sysd_backend.simulation import simulate
+from sysd_backend.simulation_models import SimulationRequest, SimulationResult
 
 
 logger = logging.getLogger(__name__)
@@ -69,7 +71,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def check_json(request: Request, call_next: RequestResponseEndpoint) -> Response:
-        if request.method in ("POST", "PUT") and request.url.path.startswith("/api/v1/architectures"):
+        if request.method in ("POST", "PUT") and (request.url.path.startswith("/api/v1/architectures") or request.url.path == "/api/v1/simulations"):
             body = await request.body()
             if body:
                 media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
@@ -108,6 +110,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def backend_failed(request: Request, error: BackendError) -> JSONResponse:
         if isinstance(error, DocumentInvalid):
             details = [ErrorDetail(location="body", path="/document" + issue.path, code=issue.code, message=issue.message) for issue in error.issues]
+            return error_response(422, "validation_error", str(error), details)
+        if isinstance(error, SimulationInvalid):
+            details = [ErrorDetail(location="body", path=issue.path, code=issue.code, message=issue.message) for issue in error.issues]
             return error_response(422, "validation_error", str(error), details)
         if isinstance(error, ArchitectureNotFound):
             return error_response(404, "architecture_not_found", str(error))
@@ -149,5 +154,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def delete_architecture(architecture_id: UUID) -> Response:
         service.delete(architecture_id)
         return Response(status_code=204)
+
+    @app.post("/api/v1/simulations", response_model=SimulationResult, operation_id="simulateArchitecture", tags=["Simulations"], responses=responses(400, 415, 422, 500))
+    def simulate_architecture(body: SimulationRequest) -> SimulationResult:
+        return simulate(body)
 
     return app

@@ -1,7 +1,7 @@
 # Backend architecture API specification
 
 Date: 2026-10-03
-Status: Approved and implemented on 2026-10-03 for release 1, backend milestone 1. Verification passed: 73 tests, strict mypy, OpenAPI validation, and standards/spec review. Simulation remains a subsequent milestone.
+Status: Approved and implemented on 2026-10-03 for release 1, backend milestone 1. Verification passed: 73 tests, strict mypy, OpenAPI validation, and standards/spec review. The subsequent [simulation specification](simulation-spec.md), accepted on 2026-10-06, extends the shared OpenAPI contract with POST `/api/v1/simulations`; the library rules below remain applicable.
 
 ## Problem Statement
 

@@ -15,6 +15,12 @@ class ArchitectureNotFound(BackendError):
     pass
 
 
+class SimulationInvalid(BackendError):
+    def __init__(self, issues: list[ValidationIssue]) -> None:
+        super().__init__("The architecture is not ready to simulate.")
+        self.issues = issues
+
+
 class StorageUnavailable(BackendError):
     pass
 

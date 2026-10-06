@@ -1,7 +1,9 @@
 # Release 1 contract
 
 Date: 2026-10-03
-Status: Design agreed on 2026-10-03 after the Database and caching scope update. Backend CRUD/Save milestone implemented and verified; simulation remains a later milestone.
+Status: Design agreed on 2026-10-03 after the Database and caching scope update. Backend CRUD/Save milestone implemented and verified. Simulation specifications accepted and implemented on 2026-10-06. Backend checks, frontend checks, browser acceptance tests, production build, and representative-diagram visual review pass.
+
+Amended on 2026-10-06 for synchronous request/response flow: replies return from the Database through the Server and the actual request path to the Caller Group. Successful completion occurs on caller receipt. Capacity limits new incoming requests; replies pass freely. Excess requests are dropped without processing or a response. This supersedes the earlier one-way completion rule; the rules and acceptance totals below reflect the amendment recorded in [ADR 0008](adr/0008-synchronous-request-response-flow.md).
 
 ## Purpose and delivery
 
@@ -13,16 +15,18 @@ On 2026-10-03, the user selected architecture CRUD and explicit Save as the firs
 
 The backend milestone is implemented with five CRUD endpoints, durable SQLite storage, generated API documentation, 73 passing domain/HTTP/contract tests, and strict static type checks. Setup and startup commands are in the [README](../README.md); the separate standards and specification reviews are recorded in [backend review](backend-review.md).
 
+On 2026-10-06, the user discussed and accepted the [backend simulation specification](../specs/backend/simulation-spec.md) and [frontend replay specification](../specs/frontend/simulation-replay-spec.md), then requested parallel implementation of both. The user confirmed default 60 ticks, Run from the unsaved working canvas, separate Edit/Replay modes, and the canvas/timeline/inspector layout. Replay displays steps without elapsed-time labels. All components must be reachable from a Caller Group for Run. Expected scale is about 20 components; no new arbitrary graph-size or run-duration cap was selected. Request-type Gateway routing is deferred, and final visual styling must meet the replay specification's visual checks.
+
 ## Recorded decisions
 
 - Canvas with Caller Group, Load Balancer, Gateway, Server, and Database components and directed connections.
-- No cycles or loopbacks; single-destination routing. Fanout is future work.
+- Request dependencies have no cycles or loopbacks; single-destination routing. Replies follow existing connections in reverse. Fanout is future work.
 - Caller groups generate a total configured RPS shared across their caller count. Caller-group capacity is unused.
 - A tick is one virtual second; configurable total run length defaults to 60 ticks.
-- Processing capacity resets per tick. Handle up to capacity and drop excess requests.
+- Request processing capacity resets per tick. Handle up to capacity and discard excess requests without a reply. Responses do not consume capacity.
 - Routers follow round-robin or deterministic weighted splits without checking destination health or redistributing drops.
 - Fixed weighted rounding: three requests at 50/50 produce 2/1 in stable destination order every tick, without rotating the remainder.
-- Traffic advances one hop per tick.
+- Requests and replies advance one hop per tick. A handled request completes only when its response reaches the caller.
 - Calculate a fixed snapshot, then replay aggregate tick frames with play/pause and fast-forward.
 - Display received, handled, dropped, and capacity used = handled/capacity; show connection traffic and run totals.
 - SQLite saved-architecture library, explicit Save, latest saved version, and an unsaved-changes prompt on leaving.
@@ -38,16 +42,17 @@ These defaults were made explicit in the consolidated review and accepted with t
 - Tick 0 is the empty initial state; execute ticks 1–60 by default, yielding 60 calculated frames plus the initial frame.
 - Apply the next-tick boundary to source output too: callers generate in tick 1, first destination receives in tick 2.
 - Callers emit during every executed tick. Stop at the selected total; do not append automatic drain ticks.
-- Record remaining traffic as in flight. Enforce `generated = terminal completions + dropped + in flight`.
+- Record active requests and replies as in flight. Enforce `generated = caller completions + dropped + in flight`. Drops leave active inventory immediately and do not create replies or caller timeout events.
 
 ### Node roles and validation
 
 - Caller Group: no incoming connections, exactly one outgoing connection, configurable caller count and total RPS.
 - Load Balancer/Gateway: configured processing capacity, one or more destinations, and a routing policy. They share routing primitives in this release.
-- Server: configured capacity; zero outgoing connections to end a path, or one to forward handled traffic.
+- Server: configured request capacity; zero outgoing request connections to start a reply, or one to forward handled traffic and receive its downstream reply.
 - Database: configured capacity and no outgoing connections in release 1. It accepts requests up to its per-tick capacity, drops excess, and uses the same metrics and capacity colors as other processing components.
-- Each request forwarded by a server to a database counts as one database request. Database handling completes that modeled path; query timing, read/write behavior, replication, and response traffic are outside release 1.
+- Each request forwarded by a server to a database counts as one database request. Database handling starts a reply to that Server; the reply returns through the actual request path to its caller. Query timing, payload contents, read/write behavior, replication, application status-code logic, and caller timeouts are outside release 1.
 - Save incomplete diagrams while editing; reject invalid simulation inputs with readable backend validation errors.
+- For simulation, require at least one Caller Group and require every component to be reachable from a Caller Group. Reachability is structural; zero-RPS sources and zero-weight paths can still yield valid zero-traffic components. Save readiness remains separate.
 - Validate unique IDs, existing edge endpoints, no duplicate connections, allowed connection counts, and an acyclic graph.
 - Use positive integer caller counts/capacities, nonnegative integer RPS, and positive integer total ticks.
 - Weighted routes use nonnegative relative weights with at least one positive weight. Zero-weight destinations receive no traffic; weights need not sum to 100.
@@ -57,9 +62,9 @@ These defaults were made explicit in the consolidated review and accepted with t
 - Persist explicit destination order so "first" stays stable after reopening.
 - Weighted routing: floor proportional counts, then distribute remaining whole requests in fixed order among positive-weight destinations. No cross-tick rounding debt.
 - Round-robin: carry a rotating cursor across ticks and reset it when a new simulation starts. This stays distinct from fixed weighted rounding.
-- Aggregate counts suffice; no per-request objects or caller-level traces.
-- Every node reads current-tick input and writes output only to next-tick input. Merge fan-in before enforcing capacity once.
-- A terminal server's or database's handled traffic counts as completed. Nonterminal output becomes next-tick traffic.
+- Aggregate counts suffice. Internal cohorts retain originating caller and traversed path for reverse routing; no per-request objects or individual traces are exposed.
+- Every node reads current-tick requests/replies and writes output only to next-tick input in the relevant direction. Merge request fan-in before enforcing capacity once.
+- A terminal Server or Database creates a successful reply for handled traffic. Intermediate components return it along its actual path without a new routing decision or another capacity charge. Only caller receipt counts as completed.
 - Per-node counts describe that tick; cumulative totals are separate. Summing handled values across nodes counts visits, not unique completions.
 - Capacity colors: below 80% normal; 80% to below 100% yellow; 100% red.
 - One-tick hops are abstract timing rules. Do not report estimated service/query latency.
@@ -68,9 +73,12 @@ These defaults were made explicit in the consolidated review and accepted with t
 
 - Retain Python/FastAPI; keep the domain model and tick engine independent of the API.
 - Return fixed graph/configuration snapshot, ordered frames keyed by node/edge IDs, and summary in one JSON response. No streaming is needed.
+- Run sends the current working document and explicit `total_ticks` to POST `/api/v1/simulations`, as specified in the accepted simulation API contract. It does not require or perform Save.
 - Decode once in the frontend. Playback selects frames; it does not calculate routing or capacity.
 - At 1×, advance one tick per real second; faster playback advances recorded ticks more quickly. Pause holds the current frame.
+- Display tick position as Step; do not display elapsed seconds or estimate a request/response round-trip duration. The internal accounting tick and one-hop rule remain unchanged.
 - Keep the result's snapshot so edited configuration is not presented as belonging to an old run. Recalculate to get updated results.
+- Edit uses the working document; Replay uses the immutable run snapshot and retains selection, inspection, pan, zoom, and Fit while preventing document mutation.
 - Retain Svelte/TypeScript, Svelte Flow, and Tailwind from the overview as implementation defaults; the user has no strong frontend preference.
 
 ### Persistence and library
@@ -88,9 +96,9 @@ These are checks for the eventual implementation, not measured infrastructure cl
 1. A node receiving 100 requests with capacity 60 reports received 100, handled 60, dropped 40, and capacity used 100%.
 2. Three handled requests split 50/50 route 2/1 every tick in stored destination order.
 3. A 70/30 split of 100 requests to servers with capacities 50/100 causes the first to drop 20 and the second to handle 30; no redistribution.
-4. `Caller → LB → Server → Database` generates at tick 1, reaches LB at tick 2, Server at tick 3, and Database at tick 4. Changing node iteration order does not change this.
-5. For that graph at 100 source RPS and capacities LB 100, Server 60, Database 60, after 60 ticks: 6,000 generated, 3,420 completed, 2,320 dropped, 260 in flight.
+4. `Caller → LB → Server → Database` generates at tick 1, reaches LB at tick 2, Server at tick 3, and Database at tick 4. Its successful reply reaches Server at tick 5, LB at tick 6, and Caller at tick 7. Changing node iteration order does not change this.
+5. For that graph at 100 source RPS and capacities LB 100, Server 60, Database 60, after 60 ticks: 6,000 generated, 3,240 completed at callers, 2,320 dropped, and 440 in flight. Database handling totals 3,420 visits.
 6. Playback speed/pause changes presentation timing only. Running the same snapshot again gives identical results.
 7. Save/reopen restores positions, component settings, RPS, weights, and destination order. Simulate recalculates results.
 
-The engine and replay explanation is expanded in [simulation-flow.md](simulation-flow.md). The user confirmed the updated design with "Good. looks good." on 2026-10-03. This concludes the design interview; implementation is a separate next step.
+The engine and replay explanation is expanded in [simulation-flow.md](simulation-flow.md). The user confirmed the initial design with "Good. looks good." on 2026-10-03. The detailed simulation contracts and synchronous-response amendment were accepted for implementation on 2026-10-06.

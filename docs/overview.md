@@ -11,15 +11,16 @@
 - Per processing component, show received, handled, and dropped counts. Capacity used is handled/configured capacity, with yellow from 80% to below 100% and red at 100%.
 - Routing supports round-robin and deterministic weighted splits. Routers follow configured routes without checking destination health or redistributing traffic away from full servers. Each routing decision selects one destination.
 - The component catalog is Caller Group, Load Balancer, Gateway, Server, and Database. No cycles or loopbacks are allowed. The consolidated release draft allows servers to terminate a path or forward handled traffic through one connection, and models databases as terminal components with per-tick capacity and drop accounting.
+- The 2026-10-06 amendment covers synchronous replies. Database or terminal Server handling starts a reply along the actual traversed path; successful completion occurs on caller receipt. The saved DAG describes request dependencies, while replies use existing connections in reverse. Replies do not consume capacity or route again. Excess requests are discarded without a response; caller timeouts are outside this milestone.
 - Weighted allocations use a fixed destination order for integer remainders: at 3 requests with a 50/50 split, the first destination receives 2 and the second 1 every tick. Weighted remainders do not rotate between ticks.
 - Runs have a configurable total length, defaulting to 60 ticks, with per-tick counts and whole-run totals. Requests still in transit at the final tick are reported as in flight.
 - SQLite persistence for a library of architectures, retaining the latest saved version of each architecture.
 - Save is explicit, with an unsaved-changes prompt when leaving. Save the architecture and component configuration, with test RPS also retained. Simulation results and playback state are not persisted.
 - Simulate calculates a fixed snapshot and returns aggregate frames, one per tick, with node and connection counts plus run totals. The frontend replays frames with play/pause and fast-forward controls. Configuration changes require a new simulation for updated results. Individual request traces are outside release 1.
-- Propagation is one hop per tick. All nodes read current-tick input; forwarded traffic is available downstream next tick. The release draft applies the same boundary to source output: generation on tick 1 reaches its first destination on tick 2. See [simulation-flow.md](simulation-flow.md).
+- Propagation is one hop per tick in both directions. All nodes read current-tick input; output reaches its next hop next tick. This boundary applies to caller generation and newly created replies. The interface displays steps without elapsed-time labels. See [simulation-flow.md](simulation-flow.md).
 - Python backend. A Go migration is conditional on measured computation performance for complex systems. Frontend technologies are flexible.
 
-The agreed release contract is in [release-1.md](release-1.md), including the implementation defaults accepted on 2026-10-03. The design interview is complete.
+The current release contract is in [release-1.md](release-1.md), including the implementation defaults accepted on 2026-10-03 and the synchronous-response amendment on 2026-10-06. The detailed simulation specifications were accepted and implemented on 2026-10-06. Backend checks, frontend checks, browser acceptance tests, production build, and representative-diagram visual review pass.
 
 Future work, including caching, queues, fanout, health-aware balancing, retries, and export, is tracked in [follow-up.md](follow-up.md). Caching is planned for the next release; Queue is also requested for that release's discussion. Define their behavior when planning that release.
 
@@ -118,18 +119,18 @@ Not every property needs to apply to every component.
 
 ## 3. Features
 
-- [ ] Visual drag-and-drop architecture editor
-- [ ] Connect components using directional edges
-- [ ] Component configuration panel
-- [ ] Workload configuration
-- [ ] Requests-per-second simulation
-- [ ] Request flow through connected components
-- [ ] Component utilization
+- [x] Visual drag-and-drop architecture editor
+- [x] Connect components using directional edges
+- [x] Component configuration panel
+- [x] Workload configuration
+- [x] Requests-per-second simulation
+- [x] Request and response flow through connected components
+- [x] Component utilization
 - [ ] Bottleneck detection
 - [ ] Latency calculation
 - [ ] Throughput calculation
-- [ ] Visual indication of overloaded components
-- [ ] Simulation results panel
+- [x] Visual indication of overloaded components
+- [x] Simulation results panel
 
 ---
 

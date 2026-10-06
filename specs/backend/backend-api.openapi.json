@@ -4,7 +4,7 @@
   "info": {
     "title": "System Design Simulator — Architecture Library API",
     "version": "1.0.0-draft",
-    "description": "Release 1 milestone 1 design contract. Architecture CRUD and explicit Save only; simulation is deferred. POST is first Save and PUT replaces an existing saved document. The frontend owns unsaved edits. x-strict-integer and x-finite describe required runtime checks beyond standard JSON Schema."
+    "description": "Release 1 design contract. Architecture CRUD and explicit Save accept incomplete diagrams. Simulation calculates the current unsaved document and records all forward requests and returning responses. The frontend owns unsaved edits. x-strict-integer and x-finite describe required runtime checks beyond standard JSON Schema."
   },
   "servers": [
     {
@@ -16,6 +16,10 @@
     {
       "name": "Architectures",
       "description": "Local SQLite architecture library and explicit Save."
+    },
+    {
+      "name": "Simulations",
+      "description": "Synchronous recorded runs from an unsaved document snapshot."
     }
   ],
   "paths": {
@@ -505,6 +509,78 @@
           }
         }
       }
+    },
+    "/api/v1/simulations": {
+      "post": {
+        "tags": [
+          "Simulations"
+        ],
+        "summary": "Simulate Architecture",
+        "operationId": "simulateArchitecture",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Complete recorded run. Frame zero is empty and summary equals final frame totals.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Structured application error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Structured application error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Structured application error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Structured application error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "description": "Calculate exactly total_ticks from the submitted document without accessing the architecture library. Return frames 0..total_ticks and the complete synchronous request/response flow. Require all components to be reachable from Caller Groups. Apply capacity only to forward requests; silently drop overflow. Responses follow their actual request path back to the original caller. Do not drain after the final tick."
+      }
     }
   },
   "components": {
@@ -977,7 +1053,12 @@
               "cycle",
               "forbidden_incoming",
               "too_many_outgoing",
-              "forbidden_outgoing"
+              "forbidden_outgoing",
+              "missing_source",
+              "missing_destination",
+              "all_zero_weights",
+              "unreachable_component",
+              "count_overflow"
             ]
           },
           "message": {
@@ -1036,6 +1117,308 @@
         "required": [
           "error"
         ]
+      },
+      "SimulationRequest": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/ArchitectureDocument"
+          },
+          "total_ticks": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Total Ticks",
+            "x-strict-integer": true,
+            "description": "Required positive exact integer. Frontend default is 60; the API does not substitute a missing value. Planned generated traffic must remain within the safe integer range."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document",
+          "total_ticks"
+        ],
+        "title": "SimulationRequest"
+      },
+      "SimulationSnapshot": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/ArchitectureDocument"
+          },
+          "total_ticks": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Total Ticks",
+            "x-strict-integer": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document",
+          "total_ticks"
+        ],
+        "title": "SimulationSnapshot"
+      },
+      "CallerFrame": {
+        "properties": {
+          "generated": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Generated",
+            "x-strict-integer": true
+          },
+          "completed": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Completed",
+            "x-strict-integer": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "generated",
+          "completed"
+        ],
+        "title": "CallerFrame"
+      },
+      "ProcessingFrame": {
+        "properties": {
+          "received": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Received",
+            "x-strict-integer": true
+          },
+          "handled": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Handled",
+            "x-strict-integer": true
+          },
+          "dropped": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Dropped",
+            "x-strict-integer": true
+          },
+          "responses_received": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Responses Received",
+            "x-strict-integer": true
+          },
+          "responses_returned": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Responses Returned",
+            "x-strict-integer": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "received",
+          "handled",
+          "dropped",
+          "responses_received",
+          "responses_returned"
+        ],
+        "title": "ProcessingFrame"
+      },
+      "EdgeFrame": {
+        "properties": {
+          "forwarded": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Forwarded",
+            "x-strict-integer": true
+          },
+          "returned": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Returned",
+            "x-strict-integer": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "forwarded",
+          "returned"
+        ],
+        "title": "EdgeFrame"
+      },
+      "TickCounts": {
+        "properties": {
+          "generated": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Generated",
+            "x-strict-integer": true
+          },
+          "completed": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Completed",
+            "x-strict-integer": true
+          },
+          "dropped": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Dropped",
+            "x-strict-integer": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "generated",
+          "completed",
+          "dropped"
+        ],
+        "title": "TickCounts"
+      },
+      "SimulationTotals": {
+        "properties": {
+          "generated": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Generated",
+            "x-strict-integer": true
+          },
+          "completed": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Completed",
+            "x-strict-integer": true
+          },
+          "dropped": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Dropped",
+            "x-strict-integer": true
+          },
+          "in_flight": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "In Flight",
+            "x-strict-integer": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "generated",
+          "completed",
+          "dropped",
+          "in_flight"
+        ],
+        "title": "SimulationTotals"
+      },
+      "SimulationFrame": {
+        "properties": {
+          "tick": {
+            "type": "integer",
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Tick",
+            "x-strict-integer": true
+          },
+          "nodes": {
+            "patternProperties": {
+              "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CallerFrame"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ProcessingFrame"
+                  }
+                ]
+              }
+            },
+            "propertyNames": {
+              "maxLength": 128,
+              "minLength": 1
+            },
+            "type": "object",
+            "title": "Nodes"
+          },
+          "edges": {
+            "patternProperties": {
+              "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$": {
+                "$ref": "#/components/schemas/EdgeFrame"
+              }
+            },
+            "propertyNames": {
+              "maxLength": 128,
+              "minLength": 1
+            },
+            "type": "object",
+            "title": "Edges"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/TickCounts"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/SimulationTotals"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tick",
+          "nodes",
+          "edges",
+          "counts",
+          "totals"
+        ],
+        "title": "SimulationFrame",
+        "description": "Nodes and edges cover exactly the snapshot IDs. The node metric variant follows its snapshot component type. Counts describe this tick; totals describe cumulative outcomes and current boundary inventory."
+      },
+      "SimulationResult": {
+        "properties": {
+          "snapshot": {
+            "$ref": "#/components/schemas/SimulationSnapshot"
+          },
+          "frames": {
+            "items": {
+              "$ref": "#/components/schemas/SimulationFrame"
+            },
+            "type": "array",
+            "title": "Frames"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SimulationTotals"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "snapshot",
+          "frames",
+          "summary"
+        ],
+        "title": "SimulationResult"
       }
     },
     "parameters": {
