@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
 from sysd_backend.errors import SimulationInvalid
-from sysd_backend.models import ArchitectureDocument, Connection, DetailCode, MAX_INTEGER, ValidationIssue
+from sysd_backend.models import (
+    ArchitectureDocument, CallerGroup, Connection, Database, DetailCode, Gateway,
+    LoadBalancer, MAX_INTEGER, Server, ValidationIssue,
+)
 from sysd_backend.simulation_models import (
     CallerFrame, EdgeFrame, NodeFrame, ProcessingFrame, SimulationFrame, SimulationRequest,
     SimulationResult, SimulationSnapshot, SimulationTotals, TickCounts,
@@ -22,6 +25,7 @@ class Cohort:
 
 
 Arrivals: TypeAlias = dict[str, dict[Cohort, int]]
+ProcessingComponent: TypeAlias = LoadBalancer | Gateway | Server | Database
 
 
 @dataclass
@@ -152,6 +156,80 @@ def respond(cohort: Cohort, count: int, edges: dict[str, Connection], arrivals: 
         merge_arrival(arrivals, edge.source, Cohort(cohort.caller_id, cohort.prefix[:-1], "response"), count)
 
 
+def process_caller_traffic(
+    caller: CallerGroup, arrivals: dict[Cohort, int], destination: Connection,
+    following: Arrivals, frame: SimulationFrame,
+) -> None:
+    """Generate this tick's requests and complete replies that reached the caller."""
+    metrics = frame.nodes[caller.id]
+    assert isinstance(metrics, CallerFrame)
+    metrics.generated = caller.test_rps
+    metrics.completed = sum(count for cohort, count in arrivals.items() if cohort.phase == "response")
+    forward(destination, Cohort(caller.id, (), "request"), caller.test_rps, following, frame)
+    frame.counts.generated += metrics.generated
+    frame.counts.completed += metrics.completed
+
+
+def process_incoming_requests(
+    node: ProcessingComponent, arrivals: dict[Cohort, int], destinations: tuple[Connection, ...],
+    state: RoutingState | None, edges: dict[str, Connection], following: Arrivals, frame: SimulationFrame,
+) -> None:
+    """Apply shared request capacity, then schedule accepted traffic's next hop."""
+    metrics = frame.nodes[node.id]
+    assert isinstance(metrics, ProcessingFrame)
+    requests = sorted((cohort, count) for cohort, count in arrivals.items() if cohort.phase == "request")
+    metrics.received = sum(count for _, count in requests)
+    metrics.handled = min(metrics.received, node.capacity_rps)
+    metrics.dropped = metrics.received - metrics.handled
+    frame.counts.dropped += metrics.dropped
+    accepted = proportional_allocation(metrics.handled, [count for _, count in requests])
+    weighted = node.type in ("load_balancer", "gateway") and node.routing_policy == "weighted"
+    # Destination quotas apply to the node's complete accepted count.
+    remaining_quotas = proportional_allocation(metrics.handled, state.weights) if state is not None and weighted else []
+    for (cohort, _), count in zip(requests, accepted, strict=True):
+        if not count:
+            continue
+        if not destinations:
+            respond(cohort, count, edges, following, frame)
+            metrics.responses_returned += count
+        elif state is None:
+            forward(destinations[0], cohort, count, following, frame)
+        else:
+            if weighted:
+                allocations = proportional_allocation(count, remaining_quotas)
+                remaining_quotas = [quota - allocation for quota, allocation in zip(remaining_quotas, allocations, strict=True)]
+            else:
+                allocations = round_robin_allocation(count, state)
+            for edge, allocation in zip(destinations, allocations, strict=True):
+                forward(edge, cohort, allocation, following, frame)
+
+
+def return_incoming_responses(
+    node_id: str, arrivals: dict[Cohort, int], edges: dict[str, Connection],
+    following: Arrivals, frame: SimulationFrame,
+) -> None:
+    """Return incoming replies along their saved paths without a capacity charge."""
+    metrics = frame.nodes[node_id]
+    assert isinstance(metrics, ProcessingFrame)
+    replies = [(cohort, count) for cohort, count in arrivals.items() if cohort.phase == "response"]
+    metrics.responses_received = sum(count for _, count in replies)
+    metrics.responses_returned += metrics.responses_received
+    for cohort, count in replies:
+        respond(cohort, count, edges, following, frame)
+
+
+def calculate_tick_totals(
+    frame: SimulationFrame, previous: SimulationTotals, following: Arrivals,
+) -> SimulationTotals:
+    """Add this tick's outcomes and count traffic scheduled for the next tick."""
+    return SimulationTotals(
+        generated=previous.generated + frame.counts.generated,
+        completed=previous.completed + frame.counts.completed,
+        dropped=previous.dropped + frame.counts.dropped,
+        in_flight=sum(sum(cohorts.values()) for cohorts in following.values()),
+    )
+
+
 def simulate(request: SimulationRequest) -> SimulationResult:
     issues = validate_simulation(request)
     if issues:
@@ -170,54 +248,13 @@ def simulate(request: SimulationRequest) -> SimulationResult:
         following: Arrivals = {}
         frame = empty_frame(document, tick)
         for node in document.nodes:
-            metrics = frame.nodes[node.id]
             arrivals = current.get(node.id, {})
-            requests = sorted((cohort, count) for cohort, count in arrivals.items() if cohort.phase == "request")
-            replies = [(cohort, count) for cohort, count in arrivals.items() if cohort.phase == "response"]
             if node.type == "caller_group":
-                assert isinstance(metrics, CallerFrame)
-                metrics.generated = node.test_rps
-                metrics.completed = sum(count for _, count in replies)
-                forward(outgoing[node.id][0], Cohort(node.id, (), "request"), node.test_rps, following, frame)
-                frame.counts.generated += metrics.generated
-                frame.counts.completed += metrics.completed
-                continue
-            assert isinstance(metrics, ProcessingFrame)
-            metrics.received = sum(count for _, count in requests)
-            metrics.handled = min(metrics.received, node.capacity_rps)
-            metrics.dropped = metrics.received - metrics.handled
-            frame.counts.dropped += metrics.dropped
-            accepted = proportional_allocation(metrics.handled, [count for _, count in requests])
-            destinations = outgoing[node.id]
-            state = routing.get(node.id)
-            remaining_quotas = proportional_allocation(metrics.handled, state.weights) if state is not None and node.type in ("load_balancer", "gateway") and node.routing_policy == "weighted" else []
-            for (cohort, _), count in zip(requests, accepted, strict=True):
-                if not count:
-                    continue
-                if not destinations:
-                    respond(cohort, count, edges, following, frame)
-                    metrics.responses_returned += count
-                elif state is None:
-                    forward(destinations[0], cohort, count, following, frame)
-                else:
-                    if node.type in ("load_balancer", "gateway") and node.routing_policy == "weighted":
-                        allocations = proportional_allocation(count, remaining_quotas)
-                        remaining_quotas = [quota - allocation for quota, allocation in zip(remaining_quotas, allocations, strict=True)]
-                    else:
-                        allocations = round_robin_allocation(count, state)
-                    for edge, allocation in zip(destinations, allocations, strict=True):
-                        forward(edge, cohort, allocation, following, frame)
-            metrics.responses_received = sum(count for _, count in replies)
-            metrics.responses_returned += metrics.responses_received
-            for cohort, count in replies:
-                respond(cohort, count, edges, following, frame)
-        previous = frames[-1].totals
-        frame.totals = SimulationTotals(
-            generated=previous.generated + frame.counts.generated,
-            completed=previous.completed + frame.counts.completed,
-            dropped=previous.dropped + frame.counts.dropped,
-            in_flight=sum(sum(cohorts.values()) for cohorts in following.values()),
-        )
+                process_caller_traffic(node, arrivals, outgoing[node.id][0], following, frame)
+            else:
+                process_incoming_requests(node, arrivals, outgoing[node.id], routing.get(node.id), edges, following, frame)
+                return_incoming_responses(node.id, arrivals, edges, following, frame)
+        frame.totals = calculate_tick_totals(frame, frames[-1].totals, following)
         frames.append(frame)
         current = following
     return SimulationResult(snapshot=snapshot, frames=frames, summary=frames[-1].totals.model_copy())
