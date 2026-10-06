@@ -5,7 +5,7 @@ Status: Phase-one implementation complete and ready for user acceptance testing.
 
 Subsequent integration: the user requested wiring to the implemented backend. The [backend integration spec](backend-integration-spec.md) supersedes the browser-only persistence requirements below; the canvas/editor behavior remains applicable.
 
-Phase-one scope: the [visual specification](canvas-visuals-spec.md) and [clipboard/resizable-panel specification](editor-productivity-spec.md) complete the requested editor scope. These changes are implemented alongside backend persistence. User acceptance testing remains the final confirmation; simulation belongs to a later phase.
+Phase-one scope: the [visual specification](canvas-visuals-spec.md) and [clipboard/resizable-panel specification](editor-productivity-spec.md) complete the requested editor scope. These changes are implemented alongside backend persistence. The subsequent [simulation Run and Replay specification](simulation-replay-spec.md), accepted on 2026-10-06, extends the editor with unsaved Run and recorded results. User acceptance testing remains the final confirmation.
 
 ## Problem Statement
 

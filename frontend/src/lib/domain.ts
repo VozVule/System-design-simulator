@@ -26,7 +26,7 @@ export type ArchitectureDocument = z.infer<typeof documentSchema>;
 export type ArchitectureWrite = z.infer<typeof writeSchema>;
 export type Architecture = z.infer<typeof architectureSchema>;
 export type ArchitectureSummary = Omit<Architecture, 'document'> & { format_version: 1 };
-export type DetailCode = 'required' | 'unknown_field' | 'invalid_type' | 'invalid_value' | 'unsupported_document_version' | 'duplicate_id' | 'missing_endpoint' | 'duplicate_connection' | 'duplicate_order' | 'self_connection' | 'cycle' | 'forbidden_incoming' | 'too_many_outgoing' | 'forbidden_outgoing';
+export type DetailCode = 'required' | 'unknown_field' | 'invalid_type' | 'invalid_value' | 'unsupported_document_version' | 'duplicate_id' | 'missing_endpoint' | 'duplicate_connection' | 'duplicate_order' | 'self_connection' | 'cycle' | 'forbidden_incoming' | 'too_many_outgoing' | 'forbidden_outgoing' | 'missing_source' | 'missing_destination' | 'all_zero_weights' | 'unreachable_component' | 'count_overflow';
 export interface ErrorDetail { location: 'body' | 'path'; path: string; code: DetailCode; message: string }
 export interface ErrorResponse { error: { code: 'invalid_json' | 'unsupported_media_type' | 'validation_error' | 'unsupported_document_version' | 'architecture_not_found' | 'storage_unavailable' | 'internal_error'; message: string; details: ErrorDetail[] } }
 export const architectureListSchema = z.strictObject({ items: z.array(z.strictObject({
@@ -36,7 +36,7 @@ export const errorResponseSchema = z.strictObject({ error: z.strictObject({
   code: z.enum(['invalid_json', 'unsupported_media_type', 'validation_error', 'unsupported_document_version', 'architecture_not_found', 'storage_unavailable', 'internal_error']),
   message: z.string().min(1), details: z.array(z.strictObject({
     location: z.enum(['body', 'path']), path: z.string().regex(/^(|\/.*)$/),
-    code: z.enum(['required', 'unknown_field', 'invalid_type', 'invalid_value', 'unsupported_document_version', 'duplicate_id', 'missing_endpoint', 'duplicate_connection', 'duplicate_order', 'self_connection', 'cycle', 'forbidden_incoming', 'too_many_outgoing', 'forbidden_outgoing']),
+    code: z.enum(['required', 'unknown_field', 'invalid_type', 'invalid_value', 'unsupported_document_version', 'duplicate_id', 'missing_endpoint', 'duplicate_connection', 'duplicate_order', 'self_connection', 'cycle', 'forbidden_incoming', 'too_many_outgoing', 'forbidden_outgoing', 'missing_source', 'missing_destination', 'all_zero_weights', 'unreachable_component', 'count_overflow']),
     message: z.string().min(1),
   })),
 }) });
@@ -51,7 +51,7 @@ export const catalog: { type: ComponentType; name: string; description: string; 
   { type: 'load_balancer', name: 'Load Balancer', description: 'Distribute across destinations', color: '#6f57d2' },
   { type: 'gateway', name: 'Gateway', description: 'Route incoming requests', color: '#278597' },
   { type: 'server', name: 'Server', description: 'Handle or forward traffic', color: '#4377c5' },
-  { type: 'database', name: 'Database', description: 'Complete a traffic path', color: '#41866c' },
+  { type: 'database', name: 'Database', description: 'Handle database requests', color: '#41866c' },
 ];
 export const typeName = (type: ComponentType): string => catalog.find((c) => c.type === type)?.name ?? type;
 export function newComponent(type: ComponentType, at: { x: number; y: number }, nodeId: string = crypto.randomUUID()): Component {

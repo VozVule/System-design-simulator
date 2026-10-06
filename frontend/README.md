@@ -1,6 +1,6 @@
 # System Design Studio frontend
 
-Interactive architecture editor built with Svelte, TypeScript, Svelte Flow, and Tailwind. Save creates an architecture with POST, then uses PUT for complete replacements of the same resource. The library reads, reopens, and deletes architectures through the local backend.
+Architecture editor and simulation replay built with Svelte, TypeScript, Svelte Flow, and Tailwind. Run calculates the current canvas through the local backend. Save creates an architecture with POST, then uses PUT for complete replacements of the same resource. The library reads, reopens, and deletes saved architectures.
 
 ## Run locally
 
@@ -26,9 +26,17 @@ Select a component on the canvas and press **Ctrl+C / Ctrl+V** (Windows/Linux) o
 
 Drag the divider beside the component palette or inspector to resize that panel. Focus a divider and use Left/Right arrows to adjust it, Shift+arrows for larger steps, or Home/End for its minimum/maximum width. Narrow palettes become an icon rail; narrow inspectors stack fields and wrap text. Widths adapt to the window and remain available while switching architectures in the current session. Resizing changes the view and does not create unsaved architecture edits.
 
-Save explicitly creates or replaces an architecture in the backend's SQLite library. Saved positions, labels, caller configuration, capacities, routing policies, weights, and destination order survive a page reload and backend restart. New/Open protect unsaved changes with Save/Discard/Cancel, and supported browsers warn when leaving a changed document. Simulation is deferred.
+Save explicitly creates or replaces an architecture in the backend's SQLite library. Saved positions, labels, caller configuration, capacities, routing policies, weights, and destination order survive a page reload and backend restart. New/Open protect unsaved changes with Save/Discard/Cancel, and supported browsers warn when leaving a changed document.
 
-Failed requests preserve the working document and previous saved baseline. Backend validation errors highlight fields where possible. Saves use immutable snapshots, preserve edits made while a request is pending, and prevent overlapping requests. A request times out after 10 seconds; writes are never automatically retried. If a first Save times out or loses its response, check the library before retrying because the backend may already have created the resource.
+Set **Total steps** and select **Run** in Edit mode. The default is 60. Run includes unsaved changes and does not Save. Each request and response advances one hop per step. Capacity limits new requests; excess requests drop without a response. Successful replies follow their original path and complete at their caller. Every component must be reachable from a Caller Group for Run, but incomplete diagrams can still be saved.
+
+A successful Run opens read-only **Replay** at Step 0. Select components or connections to inspect recorded counts and configuration. Play, pause, step, scrub, or change playback speed without calculating another run. The lower strip shows totals through the selected step; the inspector also shows fixed whole-run totals. A run stops at its selected length and can end with traffic in flight.
+
+Return to **Edit** for changes or a new Run. Replay retains the captured architecture, even after newer edits or Save. A note identifies differences between that snapshot and the working canvas. Successful New/Open or deletion of the active architecture clears the recording and restores 60 steps. Results and playback settings are session state and are cleared by reload.
+
+Failed requests preserve the working document and previous saved baseline. Backend validation errors highlight fields where possible. Saves use immutable snapshots, preserve edits made while a request is pending, and prevent overlapping Saves. Library requests time out after 10 seconds; writes are never automatically retried. If a first Save times out or loses its response, check the library before retrying because the backend may already have created the resource.
+
+Run has a separate request adapter without the library timeout. Only one Run can be pending. **Cancel Run** stops waiting; the backend can still finish its calculation. Editing and Save remain available during calculation. Failed, cancelled, or malformed results retain the previous accepted recording. Run errors are separate from Save errors.
 
 Unsaved work is not recovered after closing the browser. Existing browser-local placeholder entries are not automatically migrated to the backend. There is no import/export, automatic Save, or undo history.
 
@@ -41,9 +49,9 @@ npx playwright install chromium
 npm run verify
 ```
 
-`verify` runs strict Svelte/TypeScript checking, editor/domain/store unit tests, Chromium acceptance tests against the real frontend, and the production build. Browser tests run `scripts/start.sh` on ports 5173 and 8000 with a temporary SQLite database. Stop an existing launcher first; both ports must be available. Install backend dependencies in `.venv` and frontend dependencies with `npm --prefix frontend ci` before running browser tests. Tests never modify the developer's saved library.
+`verify` runs strict Svelte/TypeScript checking, editor/domain/store/simulation/playback unit tests, Chromium acceptance tests against the real frontend, and the production build. Browser tests run `scripts/start.sh` on ports 5173 and 8000 with a temporary SQLite database. Stop an existing launcher first; both ports must be available. Install backend dependencies in `.venv` and frontend dependencies with `npm --prefix frontend ci` before running browser tests. Tests never modify the developer's saved library.
 
-API acceptance tests cover first Save POST, later PUT, backend reopening/deletion, copied connected components, pending Save edits, real validation/404 responses, disconnected requests, and Save before navigation. Canvas acceptance tests use the development-only browser placeholder store to isolate graph gestures, native clipboard shortcuts, panel resizing/reflow, and storage-failure cases. Backend unit/HTTP tests remain separate.
+API acceptance tests cover the library, unsaved Run, complete request/response flow, replay controls, snapshot isolation, capacity status, Run/Save independence, cancellation, malformed results, and context changes. Canvas acceptance tests use the development-only browser placeholder store to isolate graph gestures, native clipboard shortcuts, panel resizing/reflow, and storage-failure cases. Backend unit/HTTP tests remain separate.
 
 For individual checks:
 
@@ -58,10 +66,10 @@ The production bundle is in `dist`. `npm run preview` serves it locally for insp
 
 ## Boundaries
 
-The domain module owns contract-shaped schemas and graph commands. Editor state owns the working document, saved baseline, field drafts, and Save snapshot reconciliation. A small asynchronous architecture-store interface isolates HTTP persistence. Responses are validated before entering editor state. Canvas presentation maps from the domain document and excludes canvas/runtime metadata from persistence.
+The domain module owns contract-shaped schemas and graph commands. Editor state owns the working document, saved baseline, field drafts, and Save snapshot reconciliation. A small asynchronous architecture-store interface isolates HTTP persistence. The simulation adapter validates complete results once and freezes the captured snapshot and frames. The playback clock selects recorded frames; it does not calculate traffic. Canvas presentation excludes runtime metadata from persistence.
 
 An explicit development-only `?test-store` mode selects the browser placeholder adapter and lets acceptance tests hold a Save through the same interface. Its control module is excluded from production builds. The normal application uses HTTP; there are no user-facing artificial delays or random failures.
 
 The approved editor behavior is specified in the [frontend spec](../specs/frontend/frontend-spec.md). The [backend integration spec](../specs/frontend/backend-integration-spec.md) supersedes its temporary browser-only persistence boundary.
 
-The final phase-one requirements are in the [clipboard and resizable-panel spec](../specs/frontend/editor-productivity-spec.md). Phase one includes architecture creation/editing, backend Save/library operations, recognizable component shapes, copy/paste shortcuts, and adjustable responsive panels. Simulation remains a later phase.
+The phase-one requirements are in the [clipboard and resizable-panel spec](../specs/frontend/editor-productivity-spec.md). Simulation extends that editor through the accepted [Run and Replay spec](../specs/frontend/simulation-replay-spec.md), with the result contract defined in the [backend simulation spec](../specs/backend/simulation-spec.md).
